@@ -81,7 +81,7 @@ impl DataReader<'_> {
         }
 
         let string_lenght = self.data[self.cursor] as usize;
-        let vec = utils::arrays::array_copy(self.data, self.cursor + 1, string_lenght + self.cursor + 1).unwrap();
+        let vec = utils::arrays::array_copy(self.data, self.cursor + 1, string_lenght + self.cursor + 1);
 
         self.cursor += string_lenght + 1;
 
