@@ -36,7 +36,7 @@ pub fn register_listener(listener: impl PacketListener + Send + 'static) {
 pub fn start() {
     register_listener(LoginPacketListener{});
 
-    let server = TcpListener::bind("127.0.0.1:25565").unwrap();
+    let server = TcpListener::bind("0.0.0.0:25565").unwrap();
 
     loop {
         println!("Esperando conexões");
