@@ -5,7 +5,7 @@ use crate::packet::RawPacket;
 #[derive(Debug)]
 pub struct PacketHandshake {
     packet: PacketStruct,
-    protocol_version: u64,
+    protocol_version: u32,
     server_address: String,
     server_port: u16,
     next_state: u8

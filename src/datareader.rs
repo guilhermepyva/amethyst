@@ -10,8 +10,32 @@ impl DataReader<'_> {
         DataReader { data, cursor: 0 }
     }
 
-    pub fn read_varint(&mut self) -> Result<u64, &str> {
-        let mut result: u64 = 0;
+    pub fn read_data_fixed(&mut self, length: usize) -> Result<Vec<u8>, &str> {
+        if !self.check_lenght(length) {
+            return Err("data size is longer than datareader remaining bytes")
+        }
+
+        let mut data = vec![0; length];
+
+        for x in self.cursor..length {
+            data[x - self.cursor] = self.data[x];
+        }
+
+        self.cursor += length;
+        Ok(data)
+    }
+
+    pub fn read_data(&mut self) -> Result<Vec<u8>, &str> {
+        let mut length = match self.read_varint() {
+            Ok(t) => t,
+            Err(e) => return Err(e)
+        };
+
+        self.read_data_fixed(length as usize)
+    }
+
+    pub fn read_varint(&mut self) -> Result<u32, &'static str> {
+        let mut result: u32 = 0;
         let mut num_read: u8 = 0;
         let mut read: u8;
 
@@ -20,7 +44,7 @@ impl DataReader<'_> {
                 Err(_) => return Ok(result),
                 Ok(t) => t
             };
-            result += ((read & 0b01111111) as u64) << (7 * num_read);
+            result += ((read & 0b01111111) as u32) << (7 * num_read);
 
             num_read += 1;
             if num_read > 5 {
@@ -32,7 +56,7 @@ impl DataReader<'_> {
         }
     }
 
-    pub fn read_varlong(&mut self) -> Result<u128, &str> {
+    pub fn read_varlong(&mut self) -> Result<u128, &'static str> {
         let mut result: u128 = 0;
         let mut num_read: u8 = 0;
         let mut read: u8;
@@ -81,11 +105,17 @@ impl DataReader<'_> {
         }
 
         let string_lenght = self.data[self.cursor] as usize;
-        let vec = utils::arrays::array_copy(self.data, self.cursor + 1, string_lenght + self.cursor + 1);
+        if string_lenght == 0 {
+            return Ok(String::new())
+        }
+        let vec = utils::arrays::extract_vector(self.data, self.cursor + 1, string_lenght + self.cursor + 1);
 
         self.cursor += string_lenght + 1;
 
-        return Ok(String::from_utf8(vec).unwrap());
+        return match String::from_utf8(vec) {
+            Ok(t) => Ok(t),
+            Err(_e) => Err("couldn't convert bytes to string")
+        }
     }
 
     fn check_lenght(&self, lenght: usize) -> bool {
