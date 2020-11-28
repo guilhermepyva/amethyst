@@ -16,7 +16,7 @@ impl server::PacketListener for LoginPacketListener {
         let public_key = RSA.public_key_to_der().unwrap();
 
         match packet {
-            Packet::LoginStart(login_start) => {
+            Packet::LoginStart(_login_start) => {
                 let encryption_request = PacketEncryptionRequest{
                     packet: PacketStruct{id:0x01, uuid: None},
                     server: String::new(),

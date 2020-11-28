@@ -38,7 +38,7 @@ impl DataWriter {
     }
 
     pub fn set_lenght(&mut self, lenght: u32) {
-S        let varint = get_varint(lenght);
+        let varint = get_varint(lenght);
         self.data.splice(0..0, varint);
     }
 }
