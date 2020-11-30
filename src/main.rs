@@ -10,8 +10,7 @@ mod net;
 mod datawriter;
 
 fn main() {
-    server::register_listener(PackageDisplay {});
-    server::start()
+    net::networkmanager::start().join();
 }
 
 struct PackageDisplay {}

@@ -47,7 +47,6 @@ pub fn start() {
 
         loop {
             let bytes_read = CLIENT.lock().unwrap().as_mut().unwrap().read(&mut buf).unwrap();
-            println!("{:?}", buf);
             if bytes_read == 0 {
                 break;
             }
@@ -56,8 +55,6 @@ pub fn start() {
                 id: buf[1],
                 data: utils::arrays::extract_vector(&buf, 2, (buf[0] + 1) as usize)
             };
-
-            println!("{:?}", rawpacket);
 
             let packet = if !handshake && rawpacket.id == 0 {
                 handshake = true;
