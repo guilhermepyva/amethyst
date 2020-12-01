@@ -1,16 +1,16 @@
 use crate::packet::Packet;
 use crate::net::server;
-use crate::datawriter::DataWriter;
-use crate::datareader::DataReader;
+use crate::data_writer::DataWriter;
+use crate::data_reader::DataReader;
 use std::net::TcpListener;
 use std::io::Read;
 use std::time::Duration;
 
 mod packet;
-mod datareader;
+mod data_reader;
 mod utils;
 mod net;
-mod datawriter;
+mod data_writer;
 mod game;
 
 fn main() {

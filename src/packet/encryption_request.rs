@@ -1,6 +1,6 @@
 use crate::packet::{PacketStruct, WritePacket};
-use crate::datawriter::DataWriter;
-use crate::datareader::DataReader;
+use crate::data_writer::DataWriter;
+use crate::data_reader::DataReader;
 
 #[derive(Debug)]
 pub struct PacketEncryptionRequest {

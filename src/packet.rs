@@ -1,5 +1,5 @@
 use uuid::Uuid;
-use crate::datareader::DataReader;
+use crate::data_reader::DataReader;
 use crate::net::network_manager::MinecraftClient;
 use std::sync::Arc;
 

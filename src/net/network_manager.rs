@@ -10,7 +10,7 @@ use io::Read;
 use std::io;
 use std::borrow::BorrowMut;
 use std::thread::JoinHandle;
-use crate::datareader::DataReader;
+use crate::data_reader::DataReader;
 use crate::packet::ReadPacket;
 use crate::net::login::LoginPacketListener;
 
