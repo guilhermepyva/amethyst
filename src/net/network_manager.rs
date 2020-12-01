@@ -3,13 +3,10 @@ use crate::utils::arrays;
 use std::net::{TcpListener, TcpStream, SocketAddr};
 use lazy_static::lazy_static;
 use uuid::Uuid;
-use std::sync::{Mutex, MutexGuard, Arc};
-use std::error::Error;
+use std::sync::{Mutex, Arc};
 use std::time::Duration;
 use io::Read;
 use std::io;
-use std::borrow::BorrowMut;
-use std::thread::JoinHandle;
 use crate::data_reader::DataReader;
 use crate::packet::ReadPacket;
 use crate::net::login::LoginPacketListener;
@@ -87,7 +84,7 @@ pub fn start() {
             println!("Client conectou: {}", client.1.ip());
             CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {uuid: Uuid::new_v4(), addr: client.1, handshake: Mutex::new(false)}), stream: client.0});
         }
-    });
+    }).expect("couldn't open thread");
 
     let sleep_time = Duration::from_millis(5);
     let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
@@ -122,7 +119,7 @@ pub fn start() {
                 let mut reader = DataReader::new(&data_vec);
                 list_to_insert.append(&mut match read_packets(&mut reader, read, &client.properties) {
                     Ok(t) => t,
-                    Err(e) => {
+                    Err(_e) => {
                         //TODO Disconnect por não ter conseguido ler packets
                         continue;
                     }
@@ -144,7 +141,7 @@ pub fn start() {
             }
             std::thread::sleep(sleep_time);
         }
-    });
+    }).expect("couldn't open thread");
 
     register_listener(LoginPacketListener {});
 }
@@ -157,7 +154,7 @@ pub fn tick_read_packets() {
 
     for packet_data in packets {
         //TODO Disconnect se tiver errado a sequencia
-        let mut reader = DataReader::new(&packet_data.data);
+        let reader = DataReader::new(&packet_data.data);
         let mut handshake = packet_data.client.handshake.lock().unwrap();
 
         let packet = if !*handshake {

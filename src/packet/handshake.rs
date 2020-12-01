@@ -1,6 +1,4 @@
-use uuid::Uuid;
-use crate::packet::{ReadPacket, Packet, PacketStruct};
-use crate::packet::RawPacket;
+use crate::packet::{ReadPacket, Packet};
 use crate::data_reader::DataReader;
 use crate::net::network_manager::MinecraftClient;
 use std::sync::Arc;

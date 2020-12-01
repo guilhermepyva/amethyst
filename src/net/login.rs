@@ -1,10 +1,7 @@
-use crate ::server;
-use crate::packet::{Packet, PacketStruct, WritePacket};
+use crate::packet::Packet;
 use lazy_static::lazy_static;
 use openssl::rsa::Rsa;
 use openssl::pkey::Private;
-use crate::packet::login_start::PacketLoginStart;
-use crate::packet::encryption_request::PacketEncryptionRequest;
 use crate::net::network_manager::PacketListener;
 
 lazy_static!(

@@ -1,5 +1,3 @@
-use std::env::var;
-
 pub struct DataWriter {
     pub data: Vec<u8>
 }

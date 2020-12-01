@@ -28,19 +28,7 @@ pub trait WritePacket {
     fn write(&self) -> Vec<u8>;
 }
 
-#[derive(Debug)]
-pub struct RawPacket {
-    pub id: u8,
-    pub data: Vec<u8>
-}
-
-impl RawPacket {
-    pub fn get_reader(&self) -> DataReader {
-        return DataReader::new(&self.data);
-    }
-}
-
-pub fn get_packet(id: u32, mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'static str> {
+pub fn get_packet(id: u32, reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'static str> {
     match id {
         0x00 => login_start::PacketLoginStart::read(reader, client),
         _ => Err("Packet id not programmed")

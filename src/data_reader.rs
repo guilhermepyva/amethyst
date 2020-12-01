@@ -29,7 +29,7 @@ impl DataReader<'_> {
     }
 
     pub fn read_data(&mut self) -> Result<Vec<u8>, &str> {
-        let mut length = match self.read_varint() {
+        let length = match self.read_varint() {
             Ok(t) => t,
             Err(e) => return Err(e)
         };
