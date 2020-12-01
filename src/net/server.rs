@@ -34,48 +34,48 @@ pub fn register_listener(listener: impl PacketListener + Send + 'static) {
 }
 
 pub fn start() {
-    register_listener(LoginPacketListener{});
-
-    let server = TcpListener::bind("0.0.0.0:25565").unwrap();
-
-    loop {
-        println!("Esperando conexões");
-        *CLIENT.lock().unwrap() = Some(server.accept().unwrap().0);
-        let mut handshake = false;
-
-        let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-
-        loop {
-            let bytes_read = CLIENT.lock().unwrap().as_mut().unwrap().read(&mut buf).unwrap();
-            if bytes_read == 0 {
-                break;
-            }
-
-            let rawpacket = packet::RawPacket {
-                id: buf[1],
-                data: utils::arrays::extract_vector(&buf, 2, (buf[0] + 1) as usize)
-            };
-
-            let packet = if !handshake && rawpacket.id == 0 {
-                handshake = true;
-                packet::handshake::PacketHandshake::read(rawpacket, None)
-            } else {
-                packet::get_packet(rawpacket, None)
-            };
-
-            let packet = match packet {
-                Err(e) => {
-                    println!("Error while reading packet: {}", e);
-                    continue;
-                }
-                Ok(t) => t
-            };
-
-            for listener in LISTENERS.lock().unwrap().iter() {
-                listener.received(&packet);
-            }
-        }
-
-        CLIENT.lock().unwrap().as_ref().unwrap().shutdown(Shutdown::Both);
-    }
+    // register_listener(LoginPacketListener{});
+    //
+    // let server = TcpListener::bind("0.0.0.0:25565").unwrap();
+    //
+    // loop {
+    //     println!("Esperando conexões");
+    //     *CLIENT.lock().unwrap() = Some(server.accept().unwrap().0);
+    //     let mut handshake = false;
+    //
+    //     let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    //
+    //     loop {
+    //         let bytes_read = CLIENT.lock().unwrap().as_mut().unwrap().read(&mut buf).unwrap();
+    //         if bytes_read == 0 {
+    //             break;
+    //         }
+    //
+    //         let rawpacket = packet::RawPacket {
+    //             id: buf[1],
+    //             data: utils::arrays::extract_vector(&buf, 2, (buf[0] + 1) as usize)
+    //         };
+    //
+    //         let packet = if !handshake && rawpacket.id == 0 {
+    //             handshake = true;
+    //             packet::handshake::PacketHandshake::read(rawpacket, None)
+    //         } else {
+    //             packet::get_packet(rawpacket, None)
+    //         };
+    //
+    //         let packet = match packet {
+    //             Err(e) => {
+    //                 println!("Error while reading packet: {}", e);
+    //                 continue;
+    //             }
+    //             Ok(t) => t
+    //         };
+    //
+    //         for listener in LISTENERS.lock().unwrap().iter() {
+    //             listener.received(&packet);
+    //         }
+    //     }
+    //
+    //     CLIENT.lock().unwrap().as_ref().unwrap().shutdown(Shutdown::Both);
+    // }
 }

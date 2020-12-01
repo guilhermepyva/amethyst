@@ -1,10 +1,13 @@
 use uuid::Uuid;
 use crate::packet::{ReadPacket, Packet, PacketStruct};
 use crate::packet::RawPacket;
+use crate::datareader::DataReader;
+use crate::net::network_manager::MinecraftClient;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PacketHandshake {
-    packet: PacketStruct,
+    client: Arc<MinecraftClient>,
     protocol_version: u32,
     server_address: String,
     server_port: u16,
@@ -12,16 +15,15 @@ pub struct PacketHandshake {
 }
 
 impl ReadPacket for PacketHandshake {
-    fn read(raw_packet: RawPacket, uuid: Option<Uuid>) -> Result<Packet, &'static str> {
-        let mut reader = raw_packet.get_reader();
-        let err = "packet byte order is wrong!";
+    fn read<'a>(mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str> {
+        let err = Result::Err("packet byte order is wrong!");
 
         Ok(Packet::Handshake(PacketHandshake {
-            packet: PacketStruct { id: raw_packet.id, uuid },
-            protocol_version: reader.read_varint().expect(err),
-            server_address: reader.read_string().expect(err),
-            server_port: reader.read_u16().expect(err),
-            next_state: reader.read_u8().expect(err),
+            client,
+            protocol_version: match reader.read_varint() { Ok(t) => t, Err(_e) => return err },
+            server_address: match reader.read_string() { Ok(t) => t, Err(_e) => return err },
+            server_port: match reader.read_u16() { Ok(t) => t, Err(_e) => return err},
+            next_state: match reader.read_u8() { Ok(t) => t, Err(_e) => return err },
         }))
     }
 }

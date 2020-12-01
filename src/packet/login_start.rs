@@ -1,20 +1,21 @@
 use uuid::Uuid;
 use crate::packet::{ReadPacket, Packet, PacketStruct};
-use crate::packet::RawPacket;
+use crate::datareader::DataReader;
+use crate::net::network_manager::MinecraftClient;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PacketLoginStart {
-    packet: PacketStruct,
+    client: Arc<MinecraftClient>,
     name: String
 }
 
 impl ReadPacket for PacketLoginStart {
-    fn read(raw_packet: RawPacket, uuid: Option<Uuid>) -> Result<Packet, &'static str> {
-        let mut reader = raw_packet.get_reader();
+    fn read<'a>(mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str> {
         let err = "packet byte order is wrong!";
 
         Ok(Packet::LoginStart(PacketLoginStart {
-            packet: PacketStruct { id: raw_packet.id, uuid },
+            client,
             name: reader.read_string().expect(err),
         }))
     }

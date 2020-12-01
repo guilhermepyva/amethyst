@@ -1,5 +1,7 @@
 use uuid::Uuid;
 use crate::datareader::DataReader;
+use crate::net::network_manager::MinecraftClient;
+use std::sync::Arc;
 
 pub mod handshake;
 pub mod login_start;
@@ -19,7 +21,7 @@ pub struct PacketStruct {
 }
 
 pub trait ReadPacket {
-    fn read(raw_packet: RawPacket, uuid: Option<Uuid>) -> Result<Packet, &'static str>;
+    fn read<'a>(reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str>;
 }
 
 pub trait WritePacket {
@@ -38,9 +40,9 @@ impl RawPacket {
     }
 }
 
-pub fn get_packet(raw_packet: RawPacket, uuid: Option<Uuid>) -> Result<Packet, &'static str> {
-    match raw_packet.id {
-        0x00 => login_start::PacketLoginStart::read(raw_packet, uuid),
+pub fn get_packet(id: u32, mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'static str> {
+    match id {
+        0x00 => login_start::PacketLoginStart::read(reader, client),
         _ => Err("Packet id not programmed")
     }
 }

@@ -2,22 +2,25 @@ use crate::utils;
 
 pub struct DataReader<'a> {
     pub data: &'a Vec<u8>,
-    cursor: usize
+    pub cursor: usize
 }
 
 impl DataReader<'_> {
     pub fn new(data: &Vec<u8>) -> DataReader {
         DataReader { data, cursor: 0 }
     }
+    pub fn new_on_cursor(data: &Vec<u8>, cursor: usize) -> DataReader {
+        DataReader { data, cursor }
+    }
 
-    pub fn read_data_fixed(&mut self, length: usize) -> Result<Vec<u8>, &str> {
+    pub fn read_data_fixed<'a>(&mut self, length: usize) -> Result<Vec<u8>, &'a str> {
         if !self.check_lenght(length) {
             return Err("data size is longer than datareader remaining bytes")
         }
 
         let mut data = vec![0; length];
 
-        for x in self.cursor..length {
+        for x in self.cursor..length + self.cursor {
             data[x - self.cursor] = self.data[x];
         }
 
@@ -34,7 +37,7 @@ impl DataReader<'_> {
         self.read_data_fixed(length as usize)
     }
 
-    pub fn read_varint(&mut self) -> Result<u32, &'static str> {
+    pub fn read_varint<'a>(&mut self) -> Result<u32, &'a str> {
         let mut result: u32 = 0;
         let mut num_read: u8 = 0;
         let mut read: u8;
@@ -56,7 +59,7 @@ impl DataReader<'_> {
         }
     }
 
-    pub fn read_varlong(&mut self) -> Result<u128, &'static str> {
+    pub fn read_varlong<'a>(&mut self) -> Result<u128, &'a str> {
         let mut result: u128 = 0;
         let mut num_read: u8 = 0;
         let mut read: u8;
