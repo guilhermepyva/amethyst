@@ -1,9 +1,8 @@
-use crate::packet::{PacketStruct, WritePacket};
+use crate::packet::WritePacket;
 use crate::data_writer::DataWriter;
 
 #[derive(Debug)]
 pub struct PacketEncryptionRequest {
-    pub packet: PacketStruct,
     pub server: String,
     pub public_key_length: u32,
     pub public_key: Vec<u8>,

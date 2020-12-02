@@ -25,32 +25,26 @@ pub enum Packet{
     Pong(pong::PongPacket)
 }
 
-#[derive(Debug)]
-pub struct PacketStruct {
-    pub id: u8,
-    pub uuid: Option<Uuid>
-}
-
 pub trait ReadPacket {
-    fn read<'a>(reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str>;
+    fn read<'a>(reader: DataReader) -> Result<Packet, &'a str>;
 }
 
 pub trait WritePacket {
     fn write(&self) -> Vec<u8>;
 }
 
-pub fn get_packet(id: u32, reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'static str> {
-    match *client.state.lock().unwrap() {
+pub fn get_packet(id: u32, reader: DataReader, state: ConnectionState) -> Result<Packet, &'static str> {
+    match state {
         ConnectionState::Login => {
             match id {
-                0x00 => login_start::PacketLoginStart::read(reader, client.clone()),
+                0x00 => login_start::PacketLoginStart::read(reader),
                 _ => Err("Packet id not programmed")
             }
         }
         ConnectionState::Status => {
             match id {
-                0x00 => Ok(Packet::StatusRequest(status_request::PacketStatusRequest{ client: client.clone() })),
-                0x01 => ping::PingPacket::read(reader, client.clone()),
+                0x00 => Ok(Packet::StatusRequest(status_request::PacketStatusRequest{})),
+                0x01 => ping::PingPacket::read(reader),
                 _ => Err("Packet id not programmed")
             }
         }

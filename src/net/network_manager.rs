@@ -18,7 +18,7 @@ use crate::net::status::StatusPacketListener;
 
 const BUFFER_SIZE: usize = 8192;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
     Handshaking,
     Status,
@@ -37,15 +37,15 @@ pub struct MinecraftClient {
 }
 
 impl MinecraftClient {
-    pub fn disconnect(&self, arc: Arc<MinecraftClient>, reason: String) {
+    pub fn disconnect(&self, reason: String) {
         *self.disconnect.lock().unwrap() = true;
 
         match *self.state.lock().unwrap() {
             ConnectionState::Play => {
-                send_packet(self.uuid.clone(), PacketDisconnectPlay {client: arc, reason: ChatComponent::new_text(reason)}.write());
+                send_packet(self.uuid.clone(), PacketDisconnectPlay {reason: ChatComponent::new_text(reason)}.write());
             }
             _ => {
-                send_packet(self.uuid.clone(), PacketDisconnectLogin {client: arc, reason: ChatComponent::new_text(reason)}.write());
+                send_packet(self.uuid.clone(), PacketDisconnectLogin {reason: ChatComponent::new_text(reason)}.write());
             }
         }
     }
@@ -80,7 +80,7 @@ struct PacketToSend {
 }
 
 pub trait PacketListener {
-    fn received(&self, packet: &packet::Packet);
+    fn received(&self, client: Arc<MinecraftClient>, packet: &packet::Packet);
 }
 
 lazy_static!(
@@ -172,7 +172,7 @@ pub fn start() {
                 list_to_insert.append(&mut match read_packets(&mut reader, read, &client.properties) {
                     Ok(t) => t,
                     Err(_e) => {
-                        client.properties.disconnect(client.properties.clone(), "Packets corrupted, closing connection.".to_owned());
+                        client.properties.disconnect("Packets corrupted, closing connection.".to_owned());
                         continue;
                     }
                 });
@@ -231,23 +231,23 @@ pub fn tick_read_packets() {
         let packet = if !*handshake {
             if packet_data.id == 0 {
                 *handshake = true;
-                match packet::handshake::PacketHandshake::read(reader, packet_data.client.clone()) {
+                match packet::handshake::PacketHandshake::read(reader) {
                     Ok(t) => t,
                     Err(_e) => {
-                        packet_data.client.disconnect(packet_data.client.clone(), "Invalid handshake packet.".to_owned());
+                        packet_data.client.disconnect("Invalid handshake packet.".to_owned());
                         continue;
                     }
                 }
             } else {
-                packet_data.client.disconnect(packet_data.client.clone(), "You were supposed to send the handshake packet.".to_owned());
+                packet_data.client.disconnect("You were supposed to send the handshake packet.".to_owned());
                 continue;
             }
         } else {
-            match packet::get_packet(packet_data.id, reader, packet_data.client.clone()) {
+            match packet::get_packet(packet_data.id, reader, *packet_data.client.state.lock().unwrap()) {
                 Ok(t) => t,
                 Err(e) => {
                     println!("Couldn't read packet of ID {}, client: {}, error: {}", packet_data.id, packet_data.client.addr.ip(), e);
-                    packet_data.client.disconnect(packet_data.client.clone(), format!("Failed while reading packet of id {}", packet_data.id));
+                    packet_data.client.disconnect(format!("Failed while reading packet of id {}", packet_data.id));
                     continue;
                 }
             }
@@ -256,7 +256,7 @@ pub fn tick_read_packets() {
         drop(handshake);
 
         for listener in LISTENERS.lock().unwrap().iter() {
-            listener.received(&packet);
+            listener.received(packet_data.client.clone(), &packet);
         }
     }
 }

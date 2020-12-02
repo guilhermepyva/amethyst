@@ -6,7 +6,6 @@ use crate::data_writer::DataWriter;
 
 #[derive(Debug)]
 pub struct PongPacket {
-    pub client: Arc<MinecraftClient>,
     pub pong: i64
 }
 impl WritePacket for PongPacket {

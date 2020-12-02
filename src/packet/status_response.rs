@@ -5,7 +5,6 @@ use crate::data_writer::DataWriter;
 use json::JsonValue;
 
 pub struct StatusResponsePacket {
-    pub client: Arc<MinecraftClient>,
     pub json: JsonValue
 }
 impl WritePacket for StatusResponsePacket {

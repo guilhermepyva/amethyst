@@ -20,24 +20,24 @@ lazy_static!(
 
 pub struct LoginPacketListener {}
 impl PacketListener for LoginPacketListener {
-    fn received(&self, packet: &Packet) {
+    fn received(&self, client: Arc<MinecraftClient>, packet: &Packet) {
         let public_key = RSA.public_key_to_der().unwrap();
         println!("{:?}", packet);
 
         match packet {
             Packet::Handshake(handshake) => {
                 LOGGING_IN.lock().unwrap().push(LoginSession{
-                    client: handshake.client.clone(),
+                    client: client.clone(),
                     protocol_version: handshake.protocol_version,
                     server_address: handshake.server_address.clone(),
                     server_port: handshake.server_port,
                 });
 
-                *handshake.client.state.lock().unwrap() = match handshake.next_state {
+                *client.state.lock().unwrap() = match handshake.next_state {
                     1 => ConnectionState::Status,
                     2 => ConnectionState::Login,
                     _ => {
-                        handshake.client.disconnect(handshake.client.clone(), "Unknown state on handshake.".to_owned());
+                        client.disconnect("Unknown state on handshake.".to_owned());
                         return;
                     }
                 };

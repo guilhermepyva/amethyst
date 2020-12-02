@@ -6,7 +6,6 @@ use crate::data_writer::DataWriter;
 
 #[derive(Debug)]
 pub struct PacketDisconnectPlay {
-    pub client: Arc<MinecraftClient>,
     pub reason: ChatComponent
 }
 

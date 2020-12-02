@@ -1,4 +1,4 @@
-use crate::net::network_manager::{PacketListener, ConnectionState};
+use crate::net::network_manager::{PacketListener, ConnectionState, MinecraftClient};
 use crate::packet::{Packet, WritePacket};
 use crate::packet::status_response::StatusResponsePacket;
 use json::JsonValue;
@@ -6,13 +6,14 @@ use json::number::Number;
 use crate::game::chat::ChatComponent;
 use crate::packet::pong::PongPacket;
 use std::time::Duration;
+use std::sync::Arc;
 
 pub struct StatusPacketListener {}
 impl PacketListener for StatusPacketListener {
-    fn received(&self, packet: &Packet) {
+    fn received(&self, client: Arc<MinecraftClient>, packet: &Packet) {
         match packet {
             Packet::StatusRequest(packet) => {
-                match *packet.client.state.lock().unwrap() {
+                match *client.state.lock().unwrap() {
                     ConnectionState::Status => {
                         let mut json = JsonValue::new_object();
                         let mut version = JsonValue::new_object();
@@ -24,21 +25,21 @@ impl PacketListener for StatusPacketListener {
                         players["online"] = JsonValue::Number(Number::from(0 as u8));
                         json["players"] = players;
                         json["description"] = ChatComponent::new_text("Servidor de Minecraft Amethyst".to_owned()).to_json();
-                        packet.client.send_packet(StatusResponsePacket {client: packet.client.clone(), json }.write());
+                        client.send_packet(StatusResponsePacket {json}.write());
                     }
                     _ => {
-                        packet.client.disconnect(packet.client.clone(), "Connection state isn't in status mode.".to_owned());
+                        client.disconnect("Connection state isn't in status mode.".to_owned());
                         return;
                     }
                 }
             }
             Packet::Ping(packet) => {
-                match *packet.client.state.lock().unwrap() {
+                match *client.state.lock().unwrap() {
                     ConnectionState::Status => {
-                        packet.client.send_packet(PongPacket {client: packet.client.clone(), pong: *packet.client.ping.lock().unwrap()}.write())
+                        client.send_packet(PongPacket {pong: packet.ping}.write())
                     }
                     _ => {
-                        packet.client.disconnect(packet.client.clone(), "Connection state isn't in status mode.".to_owned());
+                        client.disconnect("Connection state isn't in status mode.".to_owned());
                         return;
                     }
                 }

@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PacketHandshake {
-    pub client: Arc<MinecraftClient>,
     pub protocol_version: u32,
     pub server_address: String,
     pub server_port: u16,
@@ -13,9 +12,8 @@ pub struct PacketHandshake {
 }
 
 impl ReadPacket for PacketHandshake {
-    fn read<'a>(mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str> {
+    fn read<'a>(mut reader: DataReader) -> Result<Packet, &'a str> {
         Ok(Packet::Handshake(PacketHandshake {
-            client,
             protocol_version: reader.read_varint()?,
             server_address: reader.read_string()?,
             server_port: reader.read_u16()?,
