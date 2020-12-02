@@ -23,7 +23,7 @@ impl PacketListener for LoginPacketListener {
 
         match packet {
             Packet::Handshake(handshake) => {
-                network_manager::disconnect_login(handshake.client.clone(), "Sim".to_owned());
+                handshake.client.disconnect("pq eu quero ue".to_owned());
             }
             Packet::LoginStart(_login_start) => {
 
