@@ -1,6 +1,6 @@
 use crate::packet;
 use crate::utils::arrays;
-use std::net::{TcpListener, TcpStream, SocketAddr};
+use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use lazy_static::lazy_static;
 use uuid::Uuid;
 use std::sync::{Mutex, Arc};
@@ -8,8 +8,11 @@ use std::time::Duration;
 use io::Read;
 use std::io;
 use crate::data_reader::DataReader;
-use crate::packet::ReadPacket;
+use crate::packet::{ReadPacket, Packet, WritePacket};
 use crate::net::login::LoginPacketListener;
+use std::io::Write;
+use crate::packet::disconnect_login::PacketDisconnectLogin;
+use crate::game::chat::ChatComponent;
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -17,7 +20,8 @@ const BUFFER_SIZE: usize = 8192;
 pub struct MinecraftClient {
     uuid: Uuid,
     handshake: Mutex<bool>,
-    addr: SocketAddr
+    addr: SocketAddr,
+    disconnect: Mutex<bool>
 }
 
 struct Connection {
@@ -39,18 +43,34 @@ struct RawPacket {
     data: Vec<u8>
 }
 
+#[derive(Clone)]
+struct PacketToSend {
+    client: Uuid,
+    packet: Vec<u8>
+}
+
 pub trait PacketListener {
     fn received(&self, packet: &packet::Packet);
 }
 
 lazy_static!(
     static ref CLIENTS: Mutex<Vec<Connection>> = Mutex::new(vec![]);
-    static ref PACKETS_RECEIVED: Mutex<Vec<RawPacket >> = Mutex::new(vec![]);
+    static ref PACKETS_RECEIVED: Mutex<Vec<RawPacket>> = Mutex::new(vec![]);
+    static ref PACKETS_TO_SEND: Mutex<Vec<PacketToSend>> = Mutex::new(vec![]);
     static ref LISTENERS: Mutex<Vec<Box<dyn PacketListener + Send>>> = Mutex::new(vec![]);
 );
 
 pub fn register_listener(listener: impl PacketListener + Send + 'static) {
     LISTENERS.lock().unwrap().push(Box::new(listener));
+}
+
+pub fn disconnect_login(client: Arc<MinecraftClient>, reason: String) {
+    *client.disconnect.lock().unwrap() = true;
+    send_packet(client.uuid.clone(), PacketDisconnectLogin {client, reason: ChatComponent::new_text(reason)}.write());
+}
+
+pub fn send_packet(connection_uuid: Uuid, packet: Vec<u8>) {
+    PACKETS_TO_SEND.lock().unwrap().push(PacketToSend {client: connection_uuid, packet});
 }
 
 pub fn start() {
@@ -82,7 +102,7 @@ pub fn start() {
             };
 
             println!("Client conectou: {}", client.1.ip());
-            CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {uuid: Uuid::new_v4(), addr: client.1, handshake: Mutex::new(false)}), stream: client.0});
+            CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {uuid: Uuid::new_v4(), addr: client.1, handshake: Mutex::new(false), disconnect: Mutex::new(false) }), stream: client.0});
         }
     }).expect("couldn't open thread");
 
@@ -134,11 +154,30 @@ pub fn start() {
                 println!("Client desconectou: {}", disconnected.properties.addr.ip())
             }
 
-            drop(clients_locked);
-
             if !list_to_insert.is_empty() {
                 PACKETS_RECEIVED.lock().unwrap().append(&mut list_to_insert);
             }
+
+            let mut packet_to_send_locked = PACKETS_TO_SEND.lock().unwrap();
+            let mut packets_to_send = packet_to_send_locked.clone();
+            packet_to_send_locked.clear();
+            drop(packet_to_send_locked);
+            for packet in packets_to_send.iter_mut() {
+                let mut connection = match get_stream(packet.client, &mut clients_locked) {
+                    Some(t) => t,
+                    None => {
+                        println!("Client to send packet {:?} not found", packet.packet);
+                        continue;
+                    }
+                };
+
+                connection.stream.write(&packet.packet);
+                if *connection.properties.disconnect.lock().unwrap() {
+                    connection.stream.shutdown(Shutdown::Both);
+                }
+            }
+
+            drop(clients_locked);
             std::thread::sleep(sleep_time);
         }
     }).expect("couldn't open thread");
@@ -176,7 +215,7 @@ pub fn tick_read_packets() {
             match packet::get_packet(packet_data.id, reader, packet_data.client.clone()) {
                 Ok(t) => t,
                 Err(e) => {
-                    println!("{}", e);
+                    println!("Couldn't read packet of ID {}, client: {}, error: {}", packet_data.id, packet_data.client.addr.ip(), e);
                     //TODO Disconnect por erro ao ler o packet de ID {}
                     continue;
                 }
@@ -189,6 +228,16 @@ pub fn tick_read_packets() {
             listener.received(&packet);
         }
     }
+}
+
+fn get_stream(uuid: Uuid, connections: &mut Vec<Connection>) -> Option<&mut Connection> {
+    for connection in connections {
+        if connection.properties.uuid == uuid {
+            return Some(connection);
+        }
+    }
+
+    None
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize, client: &Arc<MinecraftClient>) -> Result<Vec<RawPacket>, &'a str> {

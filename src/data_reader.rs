@@ -81,7 +81,7 @@ impl DataReader<'_> {
         }
     }
 
-    pub fn read_u8(&mut self) -> Result<u8, &str> {
+    pub fn read_u8<'a>(&mut self) -> Result<u8, &'a str> {
         if !self.check_lenght(1) {
             return Err("data size is longer than datareader remaining bytes")
         }
@@ -91,7 +91,7 @@ impl DataReader<'_> {
         return Ok(self.data[self.cursor - 1]);
     }
 
-    pub fn read_u16(&mut self) -> Result<u16, &str> {
+    pub fn read_u16<'a>(&mut self) -> Result<u16, &'a str> {
         if !self.check_lenght(2) {
             return Err("data size is longer than datareader remaining bytes")
         }
@@ -102,7 +102,7 @@ impl DataReader<'_> {
         return Ok(u16);
     }
 
-    pub fn read_string(&mut self) -> Result<String, &str> {
+    pub fn read_string<'a>(&mut self) -> Result<String, &'a str> {
         if !self.check_lenght(2) {
             return Err("data size is longer than datareader remaining bytes")
         }

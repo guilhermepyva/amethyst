@@ -6,12 +6,14 @@ use std::sync::Arc;
 pub mod handshake;
 pub mod login_start;
 pub mod encryption_request;
+pub mod disconnect_login;
 
 #[derive(Debug)]
 pub enum Packet{
     Handshake(handshake::PacketHandshake),
     LoginStart(login_start::PacketLoginStart),
-    EncryptionRequest(encryption_request::PacketEncryptionRequest)
+    EncryptionRequest(encryption_request::PacketEncryptionRequest),
+    DisconnectLogin(disconnect_login::PacketDisconnectLogin)
 }
 
 #[derive(Debug)]

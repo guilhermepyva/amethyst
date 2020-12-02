@@ -11,11 +11,9 @@ pub struct PacketLoginStart {
 
 impl ReadPacket for PacketLoginStart {
     fn read<'a>(mut reader: DataReader, client: Arc<MinecraftClient>) -> Result<Packet, &'a str> {
-        let err = "packet byte order is wrong!";
-
         Ok(Packet::LoginStart(PacketLoginStart {
             client,
-            name: reader.read_string().expect(err),
+            name: reader.read_string()?,
         }))
     }
 }
