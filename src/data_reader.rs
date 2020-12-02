@@ -102,6 +102,24 @@ impl DataReader<'_> {
         return Ok(u16);
     }
 
+    pub fn read_i64<'a>(&mut self) -> Result<i64, &'a str> {
+        if !self.check_lenght(8) {
+            return Err("data size is longer than datareader remaining bytes")
+        }
+
+        let mut result: i64 = 0;
+
+        for x in 0..8 {
+            result += self.data[self.cursor + x] as i64;
+            if x != 7 {
+                result <<= 8;
+            }
+        }
+
+        self.cursor += 8;
+        return Ok(result);
+    }
+
     pub fn read_string<'a>(&mut self) -> Result<String, &'a str> {
         if !self.check_lenght(2) {
             return Err("data size is longer than datareader remaining bytes")

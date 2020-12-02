@@ -13,22 +13,52 @@ use crate::net::login::LoginPacketListener;
 use std::io::Write;
 use crate::packet::disconnect_login::PacketDisconnectLogin;
 use crate::game::chat::ChatComponent;
+use crate::packet::disconnect_play::PacketDisconnectPlay;
+use crate::net::status::StatusPacketListener;
 
 const BUFFER_SIZE: usize = 8192;
 
 #[derive(Debug)]
+pub enum ConnectionState {
+    Handshaking,
+    Status,
+    Login,
+    Play
+}
+
+#[derive(Debug)]
 pub struct MinecraftClient {
-    uuid: Uuid,
-    handshake: Mutex<bool>,
-    addr: SocketAddr,
-    disconnect: Mutex<bool>
+    pub uuid: Uuid,
+    pub handshake: Mutex<bool>,
+    pub addr: SocketAddr,
+    pub disconnect: Mutex<bool>,
+    pub state: Mutex<ConnectionState>,
+    pub ping: Mutex<i64>
+}
+
+impl MinecraftClient {
+    pub fn disconnect(&self, arc: Arc<MinecraftClient>, reason: String) {
+        *self.disconnect.lock().unwrap() = true;
+
+        match *self.state.lock().unwrap() {
+            ConnectionState::Play => {
+                send_packet(self.uuid.clone(), PacketDisconnectPlay {client: arc, reason: ChatComponent::new_text(reason)}.write());
+            }
+            _ => {
+                send_packet(self.uuid.clone(), PacketDisconnectLogin {client: arc, reason: ChatComponent::new_text(reason)}.write());
+            }
+        }
+    }
+
+    pub fn send_packet(&self, packet: Vec<u8>) {
+        send_packet(self.uuid, packet);
+    }
 }
 
 struct Connection {
     properties: Arc<MinecraftClient>,
     stream: TcpStream
 }
-
 
 impl Connection {
     fn read_stream(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -64,11 +94,6 @@ pub fn register_listener(listener: impl PacketListener + Send + 'static) {
     LISTENERS.lock().unwrap().push(Box::new(listener));
 }
 
-pub fn disconnect_login(client: Arc<MinecraftClient>, reason: String) {
-    *client.disconnect.lock().unwrap() = true;
-    send_packet(client.uuid.clone(), PacketDisconnectLogin {client, reason: ChatComponent::new_text(reason)}.write());
-}
-
 pub fn send_packet(connection_uuid: Uuid, packet: Vec<u8>) {
     PACKETS_TO_SEND.lock().unwrap().push(PacketToSend {client: connection_uuid, packet});
 }
@@ -102,7 +127,14 @@ pub fn start() {
             };
 
             println!("Client conectou: {}", client.1.ip());
-            CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {uuid: Uuid::new_v4(), addr: client.1, handshake: Mutex::new(false), disconnect: Mutex::new(false) }), stream: client.0});
+            CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {
+                uuid: Uuid::new_v4(),
+                addr: client.1,
+                handshake: Mutex::new(false),
+                disconnect: Mutex::new(false),
+                state: Mutex::new(ConnectionState::Handshaking),
+                ping: Mutex::new(0)
+            }), stream: client.0 });
         }
     }).expect("couldn't open thread");
 
@@ -140,7 +172,7 @@ pub fn start() {
                 list_to_insert.append(&mut match read_packets(&mut reader, read, &client.properties) {
                     Ok(t) => t,
                     Err(_e) => {
-                        //TODO Disconnect por não ter conseguido ler packets
+                        client.properties.disconnect(client.properties.clone(), "Packets corrupted, closing connection.".to_owned());
                         continue;
                     }
                 });
@@ -183,6 +215,7 @@ pub fn start() {
     }).expect("couldn't open thread");
 
     register_listener(LoginPacketListener {});
+    register_listener(StatusPacketListener {})
 }
 
 pub fn tick_read_packets() {
@@ -192,7 +225,6 @@ pub fn tick_read_packets() {
     drop(packets_received_locked);
 
     for packet_data in packets {
-        //TODO Disconnect se tiver errado a sequencia
         let reader = DataReader::new(&packet_data.data);
         let mut handshake = packet_data.client.handshake.lock().unwrap();
 
@@ -201,14 +233,13 @@ pub fn tick_read_packets() {
                 *handshake = true;
                 match packet::handshake::PacketHandshake::read(reader, packet_data.client.clone()) {
                     Ok(t) => t,
-                    Err(e) => {
-                        println!("{}", e);
-                        //TODO Disconnect por handshake invalido
+                    Err(_e) => {
+                        packet_data.client.disconnect(packet_data.client.clone(), "Invalid handshake packet.".to_owned());
                         continue;
                     }
                 }
             } else {
-                //TODO Disconnect
+                packet_data.client.disconnect(packet_data.client.clone(), "You were supposed to send the handshake packet.".to_owned());
                 continue;
             }
         } else {
@@ -216,7 +247,7 @@ pub fn tick_read_packets() {
                 Ok(t) => t,
                 Err(e) => {
                     println!("Couldn't read packet of ID {}, client: {}, error: {}", packet_data.id, packet_data.client.addr.ip(), e);
-                    //TODO Disconnect por erro ao ler o packet de ID {}
+                    packet_data.client.disconnect(packet_data.client.clone(), format!("Failed while reading packet of id {}", packet_data.id));
                     continue;
                 }
             }

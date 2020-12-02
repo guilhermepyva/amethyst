@@ -11,10 +11,13 @@ impl ChatComponent {
     }
     pub fn new_text(str: String) -> ChatComponent {
         let mut json = JsonValue::new_object();
-        json.insert("text", JsonValue::String(str)).unwrap();
+        json["text"] = JsonValue::String(str);
         ChatComponent {json}
     }
-    pub fn to_json(&self) -> String {
+    pub fn to_string(&self) -> String {
         self.json.to_string()
+    }
+    pub fn to_json(self) -> JsonValue {
+        self.json
     }
 }

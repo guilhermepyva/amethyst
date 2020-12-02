@@ -2,12 +2,15 @@ use crate::packet::Packet;
 use lazy_static::lazy_static;
 use openssl::rsa::Rsa;
 use openssl::pkey::Private;
-use crate::net::network_manager::{PacketListener, MinecraftClient};
+use crate::net::network_manager::{PacketListener, MinecraftClient, ConnectionState};
 use crate::net::network_manager;
 use std::sync::{Arc, Mutex};
 
 struct LoginSession {
-    client: Arc<MinecraftClient>
+    client: Arc<MinecraftClient>,
+    pub protocol_version: u32,
+    pub server_address: String,
+    pub server_port: u16,
 }
 
 lazy_static!(
@@ -23,7 +26,21 @@ impl PacketListener for LoginPacketListener {
 
         match packet {
             Packet::Handshake(handshake) => {
-                handshake.client.disconnect("pq eu quero ue".to_owned());
+                LOGGING_IN.lock().unwrap().push(LoginSession{
+                    client: handshake.client.clone(),
+                    protocol_version: handshake.protocol_version,
+                    server_address: handshake.server_address.clone(),
+                    server_port: handshake.server_port,
+                });
+
+                *handshake.client.state.lock().unwrap() = match handshake.next_state {
+                    1 => ConnectionState::Status,
+                    2 => ConnectionState::Login,
+                    _ => {
+                        handshake.client.disconnect(handshake.client.clone(), "Unknown state on handshake.".to_owned());
+                        return;
+                    }
+                };
             }
             Packet::LoginStart(_login_start) => {
 

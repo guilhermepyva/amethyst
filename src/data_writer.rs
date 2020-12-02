@@ -27,12 +27,20 @@ impl DataWriter {
         }
     }
 
-    pub fn write_u8(&mut self, n: u8) {
-        self.data.push(n)
+    pub fn write_u8(&mut self, value: u8) {
+        self.data.push(value)
     }
 
-    pub fn write_data(&mut self, n: &Vec<u8>) {
-        self.data.append(&mut n.clone());
+    pub fn write_i64(&mut self, mut value: i64) {
+        for x in 0..8 {
+            let temp = (value & 0b00000000) as u8;
+            value >>= 8;
+            self.data.push(temp);
+        }
+    }
+
+    pub fn write_data(&mut self, data: &Vec<u8>) {
+        self.data.append(&mut data.clone());
     }
 
     pub fn set_lenght(&mut self, lenght: u32) {
