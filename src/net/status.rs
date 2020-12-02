@@ -5,7 +5,6 @@ use json::JsonValue;
 use json::number::Number;
 use crate::game::chat::ChatComponent;
 use crate::packet::pong::PongPacket;
-use std::time::Duration;
 use std::sync::Arc;
 
 pub struct StatusPacketListener {}

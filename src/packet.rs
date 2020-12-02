@@ -1,7 +1,5 @@
-use uuid::Uuid;
 use crate::data_reader::DataReader;
-use crate::net::network_manager::{MinecraftClient, ConnectionState};
-use std::sync::Arc;
+use crate::net::network_manager::ConnectionState;
 
 pub mod handshake;
 pub mod login_start;
@@ -18,11 +16,7 @@ pub enum Packet{
     Handshake(handshake::PacketHandshake),
     StatusRequest(status_request::PacketStatusRequest),
     LoginStart(login_start::PacketLoginStart),
-    EncryptionRequest(encryption_request::PacketEncryptionRequest),
-    DisconnectLogin(disconnect_login::PacketDisconnectLogin),
-    DisconnectPlay(disconnect_play::PacketDisconnectPlay),
     Ping(ping::PingPacket),
-    Pong(pong::PongPacket)
 }
 
 pub trait ReadPacket {

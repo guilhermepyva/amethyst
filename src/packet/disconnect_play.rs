@@ -1,5 +1,3 @@
-use crate::net::network_manager::MinecraftClient;
-use std::sync::Arc;
 use crate::game::chat::ChatComponent;
 use crate::packet::WritePacket;
 use crate::data_writer::DataWriter;

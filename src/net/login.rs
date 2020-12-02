@@ -3,7 +3,6 @@ use lazy_static::lazy_static;
 use openssl::rsa::Rsa;
 use openssl::pkey::Private;
 use crate::net::network_manager::{PacketListener, MinecraftClient, ConnectionState};
-use crate::net::network_manager;
 use std::sync::{Arc, Mutex};
 
 struct LoginSession {

@@ -32,7 +32,7 @@ impl DataWriter {
     }
 
     pub fn write_i64(&mut self, mut value: i64) {
-        for x in 0..8 {
+        for _x in 0..8 {
             let temp = (value & 0b00000000) as u8;
             value >>= 8;
             self.data.push(temp);

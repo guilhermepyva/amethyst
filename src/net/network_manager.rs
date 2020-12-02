@@ -8,7 +8,7 @@ use std::time::Duration;
 use io::Read;
 use std::io;
 use crate::data_reader::DataReader;
-use crate::packet::{ReadPacket, Packet, WritePacket};
+use crate::packet::{ReadPacket, WritePacket};
 use crate::net::login::LoginPacketListener;
 use std::io::Write;
 use crate::packet::disconnect_login::PacketDisconnectLogin;
@@ -195,7 +195,7 @@ pub fn start() {
             packet_to_send_locked.clear();
             drop(packet_to_send_locked);
             for packet in packets_to_send.iter_mut() {
-                let mut connection = match get_stream(packet.client, &mut clients_locked) {
+                let connection = match get_stream(packet.client, &mut clients_locked) {
                     Some(t) => t,
                     None => {
                         println!("Client to send packet {:?} not found", packet.packet);

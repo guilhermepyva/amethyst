@@ -1,7 +1,4 @@
-use crate::net::network_manager::MinecraftClient;
-use std::sync::Arc;
-use crate::packet::{ReadPacket, Packet, WritePacket};
-use crate::data_reader::DataReader;
+use crate::packet::WritePacket;
 use crate::data_writer::DataWriter;
 
 #[derive(Debug)]

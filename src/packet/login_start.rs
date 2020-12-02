@@ -1,7 +1,5 @@
 use crate::packet::{ReadPacket, Packet};
 use crate::data_reader::DataReader;
-use crate::net::network_manager::MinecraftClient;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct PacketLoginStart {
