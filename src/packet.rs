@@ -6,17 +6,19 @@ pub mod login_start;
 pub mod encryption_request;
 pub mod disconnect_login;
 pub mod disconnect_play;
-mod status_request;
+pub mod status_request;
 pub mod status_response;
-mod ping;
+pub mod ping;
 pub mod pong;
+pub mod encryption_response;
 
 #[derive(Debug)]
 pub enum Packet{
     Handshake(handshake::PacketHandshake),
-    StatusRequest(status_request::PacketStatusRequest),
-    LoginStart(login_start::PacketLoginStart),
+    StatusRequest,
     Ping(ping::PingPacket),
+    LoginStart(login_start::PacketLoginStart),
+    EncryptionResponse(encryption_response::PacketEncryptionResponse)
 }
 
 pub trait ReadPacket {
@@ -37,7 +39,7 @@ pub fn get_packet(id: u32, reader: DataReader, state: ConnectionState) -> Result
         }
         ConnectionState::Status => {
             match id {
-                0x00 => Ok(Packet::StatusRequest(status_request::PacketStatusRequest{})),
+                0x00 => Ok(Packet::StatusRequest),
                 0x01 => ping::PingPacket::read(reader),
                 _ => Err("Packet id not programmed")
             }

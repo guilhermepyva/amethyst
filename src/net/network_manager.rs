@@ -9,12 +9,12 @@ use io::Read;
 use std::io;
 use crate::data_reader::DataReader;
 use crate::packet::{ReadPacket, WritePacket};
-use crate::net::login::LoginPacketListener;
 use std::io::Write;
 use crate::packet::disconnect_login::PacketDisconnectLogin;
 use crate::game::chat::ChatComponent;
 use crate::packet::disconnect_play::PacketDisconnectPlay;
-use crate::net::status::StatusPacketListener;
+use crate::net::login_handler::{get_packet, PacketResult};
+use crate::net::login_handler;
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -27,19 +27,15 @@ pub enum ConnectionState {
 }
 
 #[derive(Debug)]
-pub struct MinecraftClient {
+pub struct LoggingInClient {
     pub uuid: Uuid,
-    pub handshake: Mutex<bool>,
     pub addr: SocketAddr,
-    pub disconnect: Mutex<bool>,
     pub state: Mutex<ConnectionState>,
-    pub ping: Mutex<i64>
+    pub next_packet: Mutex<Option<Vec<u8>>>
 }
 
-impl MinecraftClient {
-    pub fn disconnect(&self, reason: String) {
-        *self.disconnect.lock().unwrap() = true;
-
+impl LoggingInClient {
+    pub fn disconnect_old(&self, reason: String) {
         match *self.state.lock().unwrap() {
             ConnectionState::Play => {
                 send_packet(self.uuid.clone(), PacketDisconnectPlay {reason: ChatComponent::new_text(reason)}.write());
@@ -50,13 +46,18 @@ impl MinecraftClient {
         }
     }
 
-    pub fn send_packet(&self, packet: Vec<u8>) {
-        send_packet(self.uuid, packet);
+    pub fn disconnect(&self, stream: &mut TcpStream, reason: String) {
+        stream.write(&PacketDisconnectLogin { reason: ChatComponent::new_text(reason) }.write());
+        stream.flush();
+        stream.shutdown(Shutdown::Both);
+        let mut logging_in = LOGGIN_IN.lock().unwrap();
+        let index = logging_in.iter().position(|x| x.uuid.eq(&self.uuid)).unwrap();
+        logging_in.remove(index);
     }
 }
 
 struct Connection {
-    properties: Arc<MinecraftClient>,
+    properties: Arc<LoggingInClient>,
     stream: TcpStream
 }
 
@@ -67,10 +68,16 @@ impl Connection {
 }
 
 #[derive(Clone)]
-struct RawPacket {
-    client: Arc<MinecraftClient>,
+struct RawPacketOld {
+    client: Arc<LoggingInClient>,
     id: u32,
     data: Vec<u8>
+}
+
+#[derive(Clone)]
+pub struct RawPacket {
+    pub id: u32,
+    pub data: Vec<u8>
 }
 
 #[derive(Clone)]
@@ -80,14 +87,15 @@ struct PacketToSend {
 }
 
 pub trait PacketListener {
-    fn received(&self, client: Arc<MinecraftClient>, packet: &packet::Packet);
+    fn received(&self, client: Arc<LoggingInClient>, packet: &packet::Packet);
 }
 
 lazy_static!(
     static ref CLIENTS: Mutex<Vec<Connection>> = Mutex::new(vec![]);
-    static ref PACKETS_RECEIVED: Mutex<Vec<RawPacket>> = Mutex::new(vec![]);
+    static ref PACKETS_RECEIVED: Mutex<Vec<RawPacketOld >> = Mutex::new(vec![]);
     static ref PACKETS_TO_SEND: Mutex<Vec<PacketToSend>> = Mutex::new(vec![]);
     static ref LISTENERS: Mutex<Vec<Box<dyn PacketListener + Send>>> = Mutex::new(vec![]);
+    static ref LOGGIN_IN: Mutex<Vec<Arc<LoggingInClient>>> = Mutex::new(vec![]);
 );
 
 pub fn register_listener(listener: impl PacketListener + Send + 'static) {
@@ -109,8 +117,8 @@ pub fn start() {
     println!("Aguardando conexões");
 
     std::thread::Builder::new().name("Amethyst - Client Handler Thread".to_owned()).spawn(move || {
-        loop {
-            let client = match server.accept() {
+        'outer: loop {
+            let (mut stream, addr) = match server.accept() {
                 Ok(t) => t,
                 Err(e) => {
                     println!("Error while accepting client: {}", e.to_string());
@@ -118,30 +126,97 @@ pub fn start() {
                 }
             };
 
-            match client.0.set_nonblocking(true) {
-                Err(e) => {
-                    println!("Couldn't set nonblocking to {}: {}", client.1.ip(), e);
-                    continue;
-                }
-                _ => {}
-            };
+            let mut logging_in_clients = LOGGIN_IN.lock().unwrap();
 
-            println!("Client conectou: {}", client.1.ip());
-            CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {
+            for logging_in in logging_in_clients.iter() {
+                if addr.ip().eq(&logging_in.addr.ip()) {
+                    stream.write(&PacketDisconnectLogin {reason: ChatComponent::new_text("Just one client logging in per time!".to_owned())}.write());
+                    stream.shutdown(Shutdown::Both);
+                    continue 'outer;
+                }
+            }
+
+            let client = Arc::new(LoggingInClient{
                 uuid: Uuid::new_v4(),
-                addr: client.1,
-                handshake: Mutex::new(false),
-                disconnect: Mutex::new(false),
+                addr,
                 state: Mutex::new(ConnectionState::Handshaking),
-                ping: Mutex::new(0)
-            }), stream: client.0 });
+                next_packet: Mutex::new(None)
+            });
+            logging_in_clients.push(client.clone());
+
+            drop(logging_in_clients);
+
+            std::thread::spawn(move || {
+                let mut buf: [u8; 512] = [0; 512];
+                'outer: loop {
+                    let read = match stream.read(&mut buf) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            println!("An error occurred while reading data in Minecraft Client {}: {}", client.addr.ip(),e.to_string());
+                            client.disconnect(&mut stream, "An error occurred while reading data from Socket.".to_owned());
+                            break;
+                        }
+                    };
+
+                    if read == 0 {
+                        let mut logging_in = LOGGIN_IN.lock().unwrap();
+                        let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
+                        logging_in.remove(index);
+                        break;
+                    }
+
+                    let data_vec = arrays::extract_vector(&buf, 0, read);
+                    let mut reader = DataReader::new(&data_vec);
+                    let packets = match read_packets(&mut reader, read) {
+                        Ok(t) => t,
+                        Err(_e) => {
+                            client.disconnect(&mut stream, "Packets corrupted, closing connection.".to_owned());
+                            break;
+                        }
+                    };
+                    for packet in packets {
+                        let packet = match get_packet(packet, *client.state.lock().unwrap()) {
+                            PacketResult::Ok(packet) => packet,
+                            PacketResult::Disconnect(string) => {
+                                client.disconnect(&mut stream, string);
+                                break 'outer;
+                            }
+                        };
+
+                        login_handler::handle(packet, &client, &mut stream);
+                    }
+
+                    let mut next_packet = client.next_packet.lock().unwrap();
+                    if next_packet.is_some() {
+                        stream.write(next_packet.as_ref().unwrap());
+                        *next_packet = None;
+                    }
+                }
+            });
+
+            // match client.0.set_nonblocking(true) {
+            //     Err(e) => {
+            //         println!("Couldn't set nonblocking to {}: {}", client.1.ip(), e);
+            //         continue;
+            //     }
+            //     _ => {}
+            // };
+            //
+            // println!("Client conectou: {}", client.1.ip());
+            // CLIENTS.lock().unwrap().push(Connection {properties: Arc::new(MinecraftClient {
+            //     uuid: Uuid::new_v4(),
+            //     addr: client.1,
+            //     handshake: Mutex::new(false),
+            //     disconnect: Mutex::new(false),
+            //     state: Mutex::new(ConnectionState::Handshaking)
+            // }), stream: client.0 });
         }
     }).expect("couldn't open thread");
 
     let sleep_time = Duration::from_millis(5);
     let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
     std::thread::Builder::new().name("Amethyst - Packet Handler Thread".to_owned()).spawn(move || {
-        let mut list_to_insert: Vec<RawPacket> = Vec::with_capacity(128);
+        let mut list_to_insert: Vec<RawPacketOld> = Vec::with_capacity(128);
         let mut client_to_remove: Option<Uuid> = None;
         loop {
             let mut clients_locked = CLIENTS.lock().unwrap();
@@ -169,10 +244,10 @@ pub fn start() {
 
                 let data_vec = arrays::extract_vector(&buf, 0, read);
                 let mut reader = DataReader::new(&data_vec);
-                list_to_insert.append(&mut match read_packets(&mut reader, read, &client.properties) {
+                list_to_insert.append(&mut match read_packets_old(&mut reader, read, &client.properties) {
                     Ok(t) => t,
                     Err(_e) => {
-                        client.properties.disconnect("Packets corrupted, closing connection.".to_owned());
+                        client.properties.disconnect_old("Packets corrupted, closing connection.".to_owned());
                         continue;
                     }
                 });
@@ -204,61 +279,19 @@ pub fn start() {
                 };
 
                 connection.stream.write(&packet.packet);
-                if *connection.properties.disconnect.lock().unwrap() {
-                    connection.stream.shutdown(Shutdown::Both);
-                }
+                // if *connection.properties.disconnect.lock().unwrap() {
+                //     connection.stream.shutdown(Shutdown::Both);
+                // }
             }
 
             drop(clients_locked);
             std::thread::sleep(sleep_time);
         }
     }).expect("couldn't open thread");
-
-    register_listener(LoginPacketListener {});
-    register_listener(StatusPacketListener {})
 }
 
 pub fn tick_read_packets() {
-    let mut packets_received_locked = PACKETS_RECEIVED.lock().unwrap();
-    let packets = (*packets_received_locked).clone();
-    packets_received_locked.clear();
-    drop(packets_received_locked);
 
-    for packet_data in packets {
-        let reader = DataReader::new(&packet_data.data);
-        let mut handshake = packet_data.client.handshake.lock().unwrap();
-
-        let packet = if !*handshake {
-            if packet_data.id == 0 {
-                *handshake = true;
-                match packet::handshake::PacketHandshake::read(reader) {
-                    Ok(t) => t,
-                    Err(_e) => {
-                        packet_data.client.disconnect("Invalid handshake packet.".to_owned());
-                        continue;
-                    }
-                }
-            } else {
-                packet_data.client.disconnect("You were supposed to send the handshake packet.".to_owned());
-                continue;
-            }
-        } else {
-            match packet::get_packet(packet_data.id, reader, *packet_data.client.state.lock().unwrap()) {
-                Ok(t) => t,
-                Err(e) => {
-                    println!("Couldn't read packet of ID {}, client: {}, error: {}", packet_data.id, packet_data.client.addr.ip(), e);
-                    packet_data.client.disconnect(format!("Failed while reading packet of id {}", packet_data.id));
-                    continue;
-                }
-            }
-        };
-
-        drop(handshake);
-
-        for listener in LISTENERS.lock().unwrap().iter() {
-            listener.received(packet_data.client.clone(), &packet);
-        }
-    }
 }
 
 fn get_stream(uuid: Uuid, connections: &mut Vec<Connection>) -> Option<&mut Connection> {
@@ -271,14 +304,33 @@ fn get_stream(uuid: Uuid, connections: &mut Vec<Connection>) -> Option<&mut Conn
     None
 }
 
-fn read_packets<'a>(reader: &mut DataReader, read: usize, client: &Arc<MinecraftClient>) -> Result<Vec<RawPacket>, &'a str> {
+fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {
+    let mut vec = vec![];
+
+    let mut jump_bytes: usize = 0;
+    while reader.cursor != read {
+        let length = reader.read_varint()?;
+        let length_length = reader.cursor;
+        let id = reader.read_varint()?;
+
+        vec.push(RawPacket {
+            id,
+            data: reader.read_data_fixed((length as usize) - (reader.cursor - length_length))?
+        });
+        jump_bytes += reader.cursor;
+    }
+
+    Ok(vec)
+}
+
+fn read_packets_old<'a>(reader: &mut DataReader, read: usize, client: &Arc<LoggingInClient>) -> Result<Vec<RawPacketOld>, &'a str> {
     let mut vec = vec![];
 
     let mut jump_bytes: usize = 0;
     while reader.cursor != read {
         let length = reader.read_varint()?;
 
-         vec.push(RawPacket {
+         vec.push(RawPacketOld {
              client: client.clone(),
              id: reader.read_varint()?,
              data: reader.read_data_fixed((length + 1 - (reader.cursor - jump_bytes) as u32) as usize)?

@@ -11,3 +11,4 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 lazy_static = "1.4.0"
 openssl = "0.10.30"
 json = "0.12.4"
+rand = "0.7.3"

@@ -7,6 +7,7 @@ dependencies = [
  "json",
  "lazy_static",
  "openssl",
+ "rand",
  "uuid",
 ]
 
