@@ -11,6 +11,7 @@ pub mod status_response;
 pub mod ping;
 pub mod pong;
 pub mod encryption_response;
+pub mod login_success;
 
 #[derive(Debug)]
 pub enum Packet{

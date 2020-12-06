@@ -9,11 +9,17 @@ use crate::game::chat::ChatComponent;
 use std::net::TcpStream;
 use crate::packet::login_start::PacketLoginStart;
 use lazy_static::lazy_static;
-use openssl::rsa::Rsa;
+use openssl::rsa::{Rsa, Padding};
 use openssl::pkey::Private;
 use openssl::rand::rand_bytes;
 use rand::Rng;
 use crate::packet::encryption_response::PacketEncryptionResponse;
+use crate::utils::arrays::extract_vector;
+use cfb8::Cfb8;
+use aes::Aes128;
+use uuid::Uuid;
+use std::sync::Arc;
+use aes::cipher::{StreamCipher, NewStreamCipher};
 
 pub enum PacketResult {
     Ok(Packet),
@@ -24,10 +30,10 @@ lazy_static!(
     static ref RSA: Rsa<Private> = Rsa::generate(1024).unwrap();
 );
 
-pub fn handle(packet: Packet, client: &LoggingInClient, stream: &mut TcpStream) {
+pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStream) {
     match packet {
         Packet::Handshake(handshake) => {
-            *client.state.lock().unwrap() = match handshake.next_state {
+            client.state = match handshake.next_state {
                 1 => ConnectionState::Status,
                 2 => ConnectionState::Login,
                 _ => {
@@ -47,26 +53,54 @@ pub fn handle(packet: Packet, client: &LoggingInClient, stream: &mut TcpStream) 
             players["online"] = JsonValue::Number(Number::from(0 as u8));
             json["players"] = players;
             json["description"] = ChatComponent::new_text("Servidor de Minecraft Amethyst".to_owned()).to_json();
-            *client.next_packet.lock().unwrap() = Some(packet::status_response::StatusResponsePacket { json }.write())
+            client.next_packet = Some(packet::status_response::StatusResponsePacket { json }.write())
         }
-        Packet::Ping(ping) => *client.next_packet.lock().unwrap() = Some(packet::pong::PongPacket{ pong: ping.ping }.write()),
+        Packet::Ping(ping) => client.next_packet = Some(packet::pong::PongPacket{ pong: ping.ping }.write()),
         Packet::LoginStart(login) => {
+            client.nickname = Some(login.nickname);
             let public_key = RSA.public_key_to_der().unwrap();
-            let verify_token = rand::thread_rng().gen::<[u8; 4]>();
+            let verify_token = rand::thread_rng().gen::<[u8; 4]>().to_vec();
 
-            *client.next_packet.lock().unwrap() = Some(packet::encryption_request::PacketEncryptionRequest {
+            client.verify_token = Some(verify_token.clone());
+            client.next_packet = Some(packet::encryption_request::PacketEncryptionRequest {
                 server: String::new(),
                 public_key_length: public_key.len() as u32,
                 public_key,
                 verify_token_length: 4,
-                verify_token: verify_token.to_vec()
+                verify_token
             }.write())
         }
         Packet::EncryptionResponse(response) => {
-            println!("{}", response.shared_secret_length);
-            println!("{}", response.shared_secret.len());
-            println!("{}", response.verify_token_length);
-            println!("{}", response.verify_token.len());
+            let mut decrypted_verify_token = [0 as u8; 128];
+            match RSA.private_decrypt(&response.verify_token, &mut decrypted_verify_token, Padding::PKCS1) {
+                Ok(t) => {},
+                Err(_e) => {
+                    client.disconnect(stream, "Couldn't decrypt verify token".to_owned());
+                    return;
+                }
+            };
+            if !extract_vector(&decrypted_verify_token, 0, 4).eq(client.verify_token.as_ref().unwrap()) {
+                client.disconnect(stream, "Verify token isn't the same".to_owned());
+                return;
+            }
+
+            let mut decrypted_shared_secret = [0 as u8; 128];
+            let shared_secret_length = match RSA.private_decrypt(&response.shared_secret, &mut decrypted_shared_secret, Padding::PKCS1) {
+                Ok(t) => t,
+                Err(_e) => {
+                    client.disconnect(stream, "Couldn't decrypt shared secret".to_owned());
+                    return;
+                }
+            };
+            let shared_secret = extract_vector(&decrypted_shared_secret, 0, shared_secret_length);
+            let mut cfb8 = Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap();
+            let mut data = packet::login_success::LoginSuccess {
+                uuid: Uuid::new_v4(),
+                nickname: client.nickname.as_ref().unwrap().clone()
+            }.write();
+            println!("{:?}", data);
+            cfb8.encrypt(&mut data);
+            client.next_packet = Some(data);
         }
         _ => {}
     }
