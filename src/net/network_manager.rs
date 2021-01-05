@@ -18,6 +18,8 @@ use crate::net::login_handler;
 use cfb8::Cfb8;
 use aes::Aes128;
 use std::borrow::BorrowMut;
+use crate::data_writer::DataWriter;
+use aes::cipher::StreamCipher;
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -195,7 +197,12 @@ pub fn start() {
                     }
 
                     if client.next_packet.is_some() {
-                        stream.write(client.next_packet.as_ref().unwrap());
+                        let packet = client.next_packet.as_mut().unwrap();
+                        packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
+                        if client.cfb8.is_some() {
+                            client.cfb8.as_mut().unwrap().encrypt(packet);
+                        }
+                        stream.write(packet);
                         client.next_packet = None;
                     }
                 }

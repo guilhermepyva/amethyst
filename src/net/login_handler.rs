@@ -20,6 +20,7 @@ use aes::Aes128;
 use uuid::Uuid;
 use std::sync::Arc;
 use aes::cipher::{StreamCipher, NewStreamCipher};
+use openssl::sha::Sha1;
 
 pub enum PacketResult {
     Ok(Packet),
@@ -93,14 +94,20 @@ pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStre
                 }
             };
             let shared_secret = extract_vector(&decrypted_shared_secret, 0, shared_secret_length);
-            let mut cfb8 = Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap();
-            let mut data = packet::login_success::LoginSuccess {
+            client.cfb8 = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
+            client.shared_secret = Some(shared_secret);
+            client.next_packet = Some(packet::login_success::LoginSuccess {
                 uuid: Uuid::new_v4(),
                 nickname: client.nickname.as_ref().unwrap().clone()
-            }.write();
-            println!("{:?}", data);
-            cfb8.encrypt(&mut data);
-            client.next_packet = Some(data);
+            }.write());
+            let mut sha1 = Sha1::new();
+            sha1.update(b"");
+            sha1.update(&client.shared_secret.as_ref().unwrap());
+            sha1.update(&RSA.public_key_to_der().unwrap());
+            let test = reqwest::blocking::Client::new();
+            let response = test.post(format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.unwrap(), sha1.))
+                .send()
+                .unwrap();
         }
         _ => {}
     }

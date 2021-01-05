@@ -11,7 +11,6 @@ impl WritePacket for StatusResponsePacket {
 
         writer.write_u8(0x00);
         writer.write_string(&self.json.to_string());
-        writer.set_lenght(writer.data.len() as u32);
 
         writer.data
     }

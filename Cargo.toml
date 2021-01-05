@@ -14,3 +14,4 @@ json = "0.12.4"
 rand = "0.7.3"
 cfb8 = "0.6.0"
 aes = "0.6.0"
+reqwest = { version = "0.10.8", features = ["blocking", "json"] }

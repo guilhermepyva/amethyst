@@ -13,7 +13,6 @@ impl WritePacket for PacketDisconnectLogin {
 
         writer.write_u8(0x00);
         writer.write_string(&self.reason.to_string());
-        writer.set_lenght(writer.data.len() as u32);
 
         writer.data
     }

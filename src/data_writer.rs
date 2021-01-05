@@ -43,27 +43,22 @@ impl DataWriter {
         self.data.append(&mut data.clone());
     }
 
-    pub fn set_lenght(&mut self, lenght: u32) {
-        let varint = get_varint(lenght);
-        self.data.splice(0..0, varint);
-    }
-}
+    pub fn get_varint(mut value: u32) -> Vec<u8> {
+        let mut data = vec![];
 
-fn get_varint(mut value: u32) -> Vec<u8> {
-    let mut data = vec![];
+        loop {
+            let mut temp = (value & 0b01111111) as u8;
+            value >>= 7;
+            if value != 0 {
+                temp |= 0b10000000;
+            }
+            data.push(temp);
 
-    loop {
-        let mut temp = (value & 0b01111111) as u8;
-        value >>= 7;
-        if value != 0 {
-            temp |= 0b10000000;
+            if value == 0 {
+                break
+            }
         }
-        data.push(temp);
 
-        if value == 0 {
-            break
-        }
+        data
     }
-
-    data
 }

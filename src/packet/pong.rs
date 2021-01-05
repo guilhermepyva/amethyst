@@ -11,7 +11,6 @@ impl WritePacket for PongPacket {
 
         writer.write_u8(0x01);
         writer.write_i64(self.pong);
-        writer.set_lenght(writer.data.len() as u32);
 
         writer.data
     }

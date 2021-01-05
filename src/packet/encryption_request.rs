@@ -20,7 +20,6 @@ impl WritePacket for PacketEncryptionRequest {
         writer.write_data(&self.public_key);
         writer.write_varint(self.verify_token_length);
         writer.write_data(&self.verify_token);
-        writer.set_lenght(writer.data.len() as u32);
 
         writer.data
     }
