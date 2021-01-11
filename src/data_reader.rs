@@ -37,8 +37,8 @@ impl DataReader<'_> {
         self.read_data_fixed(length as usize)
     }
 
-    pub fn read_varint<'a>(&mut self) -> Result<u32, &'a str> {
-        let mut result: u32 = 0;
+    pub fn read_varint<'a>(&mut self) -> Result<i32, &'a str> {
+        let mut result: i32 = 0;
         let mut num_read: u8 = 0;
         let mut read: u8;
 
@@ -47,7 +47,7 @@ impl DataReader<'_> {
                 Err(_) => return Ok(result),
                 Ok(t) => t
             };
-            result += ((read & 0b01111111) as u32) << (7 * num_read);
+            result += (((read as i8) & 0b01111111) as i32) << (7 * num_read);
 
             num_read += 1;
             if num_read > 5 {

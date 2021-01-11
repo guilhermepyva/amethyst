@@ -14,4 +14,11 @@ json = "0.12.4"
 rand = "0.7.3"
 cfb8 = "0.6.0"
 aes = "0.6.0"
+regex = "1.4.3"
+rust-crypto = "0.2.36"
+rustc-serialize = "0.3.24"
 reqwest = { version = "0.10.8", features = ["blocking", "json"] }
+
+[profile.release]
+lto = true
+panic = 'abort'

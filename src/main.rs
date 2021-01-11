@@ -1,4 +1,4 @@
-mod packet;
+mod packets;
 mod data_reader;
 mod utils;
 mod net;

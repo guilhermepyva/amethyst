@@ -1,25 +1,20 @@
-use crate::packet;
+use crate::packets;
 use crate::utils::arrays;
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use lazy_static::lazy_static;
 use uuid::Uuid;
 use std::sync::{Mutex, Arc};
-use std::time::Duration;
 use io::Read;
 use std::io;
 use crate::data_reader::DataReader;
-use crate::packet::{ReadPacket, WritePacket};
 use std::io::Write;
-use crate::packet::disconnect_login::PacketDisconnectLogin;
 use crate::game::chat::ChatComponent;
-use crate::packet::disconnect_play::PacketDisconnectPlay;
-use crate::net::login_handler::{get_packet, PacketResult};
 use crate::net::login_handler;
 use cfb8::Cfb8;
 use aes::Aes128;
-use std::borrow::BorrowMut;
 use crate::data_writer::DataWriter;
 use aes::cipher::StreamCipher;
+use crate::packets::Packet;
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -31,7 +26,6 @@ pub enum ConnectionState {
     Play
 }
 
-//TODO Tirar todos os Mutex disso aqui
 pub struct LoggingInClient {
     pub uuid: Uuid,
     pub addr: SocketAddr,
@@ -50,7 +44,7 @@ pub struct LoggingIn {
 
 impl LoggingInClient {
     pub fn disconnect(&self, stream: &mut TcpStream, reason: String) {
-        stream.write(&PacketDisconnectLogin { reason: ChatComponent::new_text(reason) }.write());
+        stream.write(&Packet::DisconnectLogin { reason: ChatComponent::new_text(reason) }.serialize().unwrap());
         stream.flush();
         stream.shutdown(Shutdown::Both);
         let mut logging_in = LOGGIN_IN.lock().unwrap();
@@ -79,7 +73,7 @@ struct RawPacketOld {
 
 #[derive(Clone)]
 pub struct RawPacket {
-    pub id: u32,
+    pub id: i32,
     pub data: Vec<u8>
 }
 
@@ -90,7 +84,7 @@ struct PacketToSend {
 }
 
 pub trait PacketListener {
-    fn received(&self, client: Arc<LoggingInClient>, packet: &packet::Packet);
+    fn received(&self, client: Arc<LoggingInClient>, packet: &packets::Packet);
 }
 
 lazy_static!(
@@ -133,7 +127,7 @@ pub fn start() {
 
             for logging_in in logging_in_clients.iter() {
                 if addr.ip().eq(&logging_in.addr.ip()) {
-                    stream.write(&PacketDisconnectLogin {reason: ChatComponent::new_text("Just one client logging in per time!".to_owned())}.write());
+                    stream.write(&Packet::DisconnectLogin { reason: ChatComponent::new_text("Just one client logging in per time!".to_owned()) }.serialize().unwrap());
                     stream.shutdown(Shutdown::Both);
                     continue 'outer;
                 }
@@ -184,11 +178,11 @@ pub fn start() {
                             break;
                         }
                     };
-                    for packet in packets {
-                        let packet = match get_packet(packet, client.state) {
-                            PacketResult::Ok(packet) => packet,
-                            PacketResult::Disconnect(string) => {
-                                client.disconnect(&mut stream, string);
+                    for raw_packet in packets {
+                        let packet = match Packet::read(raw_packet.id, &mut DataReader::new(&raw_packet.data), client.state) {
+                            Ok(packet) => packet,
+                            Err(string) => {
+                                client.disconnect(&mut stream, string.to_owned());
                                 break 'outer;
                             }
                         };
@@ -198,10 +192,10 @@ pub fn start() {
 
                     if client.next_packet.is_some() {
                         let packet = client.next_packet.as_mut().unwrap();
-                        packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
                         if client.cfb8.is_some() {
                             client.cfb8.as_mut().unwrap().encrypt(packet);
                         }
+                        packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
                         stream.write(packet);
                         client.next_packet = None;
                     }
@@ -209,82 +203,6 @@ pub fn start() {
             });
         }
     }).expect("couldn't open thread");
-
-    // let sleep_time = Duration::from_millis(5);
-    // let mut buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-    // std::thread::Builder::new().name("Amethyst - Packet Handler Thread".to_owned()).spawn(move || {
-    //     let mut list_to_insert: Vec<RawPacketOld> = Vec::with_capacity(128);
-    //     let mut client_to_remove: Option<Uuid> = None;
-    //     loop {
-    //         let mut clients_locked = CLIENTS.lock().unwrap();
-    //         for client in clients_locked.iter_mut() {
-    //             let read = match client.read_stream(&mut buf) {
-    //                 Ok(t) => t,
-    //                 Err(e) => {
-    //                     match e.kind() {
-    //                         io::ErrorKind::WouldBlock => {
-    //                             continue;
-    //                         }
-    //                         _ => {
-    //                             println!("An error occurred while reading data in Minecraft Clients: {}", e.to_string());
-    //                             continue;
-    //                         }
-    //                     }
-    //                 }
-    //             };
-    //
-    //             //Connection closed
-    //             if read == 0 {
-    //                 client_to_remove = Some(client.properties.clone().uuid);
-    //                 continue;
-    //             }
-    //
-    //             let data_vec = arrays::extract_vector(&buf, 0, read);
-    //             let mut reader = DataReader::new(&data_vec);
-    //             list_to_insert.append(&mut match read_packets_old(&mut reader, read, &client.properties) {
-    //                 Ok(t) => t,
-    //                 Err(_e) => {
-    //                     client.properties.disconnect_old("Packets corrupted, closing connection.".to_owned());
-    //                     continue;
-    //                 }
-    //             });
-    //         }
-    //
-    //         if client_to_remove.is_some() {
-    //             let client_to_remove_unwrapped = client_to_remove.unwrap();
-    //             let index = clients_locked.iter().position(|x| x.properties.uuid == client_to_remove_unwrapped).unwrap();
-    //             let disconnected = clients_locked.remove(index);
-    //             client_to_remove = None;
-    //             println!("Client desconectou: {}", disconnected.properties.addr.ip())
-    //         }
-    //
-    //         if !list_to_insert.is_empty() {
-    //             PACKETS_RECEIVED.lock().unwrap().append(&mut list_to_insert);
-    //         }
-    //
-    //         let mut packet_to_send_locked = PACKETS_TO_SEND.lock().unwrap();
-    //         let mut packets_to_send = packet_to_send_locked.clone();
-    //         packet_to_send_locked.clear();
-    //         drop(packet_to_send_locked);
-    //         for packet in packets_to_send.iter_mut() {
-    //             let connection = match get_stream(packet.client, &mut clients_locked) {
-    //                 Some(t) => t,
-    //                 None => {
-    //                     println!("Client to send packet {:?} not found", packet.packet);
-    //                     continue;
-    //                 }
-    //             };
-    //
-    //             connection.stream.write(&packet.packet);
-    //             // if *connection.properties.disconnect.lock().unwrap() {
-    //             //     connection.stream.shutdown(Shutdown::Both);
-    //             // }
-    //         }
-    //
-    //         drop(clients_locked);
-    //         std::thread::sleep(sleep_time);
-    //     }
-    // }).expect("couldn't open thread");
 }
 
 pub fn tick_read_packets() {
@@ -304,7 +222,6 @@ fn get_stream(uuid: Uuid, connections: &mut Vec<Connection>) -> Option<&mut Conn
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {
     let mut vec = vec![];
 
-    let mut jump_bytes: usize = 0;
     while reader.cursor != read {
         let length = reader.read_varint()?;
         let length_length = reader.cursor;
@@ -314,7 +231,6 @@ fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacke
             id,
             data: reader.read_data_fixed((length as usize) - (reader.cursor - length_length))?
         });
-        jump_bytes += reader.cursor;
     }
 
     Ok(vec)
