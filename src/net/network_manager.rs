@@ -18,7 +18,7 @@ use crate::packets::Packet;
 use crate::player;
 use crate::player::{Player, PlayerConnection};
 
-const BUFFER_SIZE: usize = 8192;
+const BUFFER_SIZE: usize = 1024;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
