@@ -14,9 +14,8 @@ use aes::Aes128;
 use uuid::Uuid;
 use aes::cipher::NewStreamCipher;
 use regex::Regex;
-use crypto::sha1::Sha1;
-use crypto::digest::Digest;
 use rustc_serialize::hex::ToHex;
+use openssl::sha::Sha1;
 
 pub enum PacketResult {
     Ok(Packet),
@@ -97,9 +96,9 @@ pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStre
                 nickname: client.nickname.as_ref().unwrap().clone()
             }.serialize().unwrap());
             let mut sha1 = Sha1::new();
-            sha1.input(b"");
-            sha1.input(&client.shared_secret.as_ref().unwrap());
-            sha1.input(&RSA.public_key_to_der().unwrap());
+            sha1.update(b"");
+            sha1.update(&client.shared_secret.as_ref().unwrap());
+            sha1.update(&RSA.public_key_to_der().unwrap());
 
             let test = reqwest::blocking::Client::new();
             let response = test.get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
@@ -112,8 +111,7 @@ pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStre
 }
 
 fn hex_digest(mut sha1: Sha1) -> String {
-    let mut hex: Vec<u8> = std::iter::repeat(0).take((sha1.output_bits() + 7)/8).collect();
-    sha1.result(&mut hex);
+    let mut hex = sha1.finish();
 
     let negative = (hex[0] & 0x80) == 0x80;
 
@@ -121,14 +119,14 @@ fn hex_digest(mut sha1: Sha1) -> String {
 
     if negative {
         two_complement(&mut hex);
-        format!("-{}", regex.replace(hex.as_slice().to_hex().as_str(), "").to_string())
+        format!("-{}", regex.replace(&hex.to_hex(), "").to_string())
     }
     else {
-        regex.replace(hex.as_slice().to_hex().as_str(), "").to_string()
+        regex.replace(&hex.to_hex(), "").to_string()
     }
 }
 
-fn two_complement(bytes: &mut Vec<u8>) {
+fn two_complement(bytes: &mut [u8; 20]) {
     let mut carry = true;
     for i in (0..bytes.len()).rev() {
         bytes[i] = !bytes[i] & 0xff;
