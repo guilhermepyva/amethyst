@@ -217,7 +217,7 @@ pub fn start() {
 }
 
 pub fn tick_read_packets() {
-    
+
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {

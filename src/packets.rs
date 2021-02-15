@@ -57,7 +57,7 @@ impl Packet {
                             server_address: reader.read_string()?,
                             server_port: reader.read_u16()?,
                             next_state: reader.read_u8()?, }),
-                    _ => Err("You were supposed to send the handshake packets.")
+                    _ => Err("You were supposed to send the handshake packet.")
                 }
             }
             ConnectionState::Status => {
