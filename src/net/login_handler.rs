@@ -111,46 +111,6 @@ pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStre
     }
 }
 
-// pub fn get_packet<'a>(packet: RawPacket, state: ConnectionState) -> PacketResult {
-//     match state {
-//         ConnectionState::Handshaking => {
-//             match packet.id {
-//                 0 => {
-//                     match handshake::PacketHandshake::read(DataReader::new(&packet.data)) {
-//                         Ok(t) => PacketResult::Ok(t),
-//                         Err(_e) => PacketResult::Disconnect("Invalid handshake packets.".to_owned())
-//                     }
-//                 }
-//                 _ => PacketResult::Disconnect("You were supposed to send the handshake packets.".to_owned())
-//             }
-//         }
-//         ConnectionState::Status => {
-//             match packet.id {
-//                 0x00 => PacketResult::Ok(Packet::StatusRequest),
-//                 0x01 => match packets::ping::PingPacket::read(DataReader::new(&packet.data)) {
-//                     Ok(t) => PacketResult::Ok(t),
-//                     Err(_e) => PacketResult::Disconnect("Invalid ping packets.".to_owned())
-//                 },
-//                 _ => PacketResult::Disconnect(format!("Packet id {} doesn't exist in this state", packet.id))
-//             }
-//         }
-//         ConnectionState::Login => {
-//             match packet.id {
-//                 0x00 => match PacketLoginStart::read(DataReader::new(&packet.data)) {
-//                     Ok(t) => PacketResult::Ok(t),
-//                     Err(_e) => PacketResult::Disconnect("Invalid login packets.".to_owned())
-//                 }
-//                 0x01 => match PacketEncryptionResponse::read(DataReader::new(&packet.data)) {
-//                     Ok(t) => PacketResult::Ok(t),
-//                     Err(_e) => PacketResult::Disconnect("Invalid encryption response packets.".to_owned())
-//                 }
-//                 _ => PacketResult::Disconnect(format!("Packet id {} doesn't exist in this state", packet.id))
-//             }
-//         }
-//         _ => PacketResult::Disconnect("Not programmed".to_owned())
-//     }
-// }
-
 fn hex_digest(mut sha1: Sha1) -> String {
     let mut hex: Vec<u8> = std::iter::repeat(0).take((sha1.output_bits() + 7)/8).collect();
     sha1.result(&mut hex);
