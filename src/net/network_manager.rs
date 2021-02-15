@@ -44,10 +44,12 @@ pub struct LoggingIn {
 
 impl LoggingInClient {
     pub fn disconnect(&self, stream: &mut TcpStream, reason: String) {
-        stream.write(&Packet::DisconnectLogin { reason: ChatComponent::new_text(reason) }.serialize().unwrap());
+        let mut packet = Packet::DisconnectLogin { reason: ChatComponent::new_text(reason) }.serialize().unwrap();
+        packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
+        stream.write(&packet);
         stream.flush();
         stream.shutdown(Shutdown::Both);
-        let mut logging_in = LOGGIN_IN.lock().unwrap();
+        let mut logging_in = LOGGING_IN.lock().unwrap();
         let index = logging_in.iter().position(|x| x.uuid.eq(&self.uuid)).unwrap();
         logging_in.remove(index);
     }
@@ -62,13 +64,6 @@ impl Connection {
     fn read_stream(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.read(buf)
     }
-}
-
-#[derive(Clone)]
-struct RawPacketOld {
-    client: Arc<LoggingInClient>,
-    id: u32,
-    data: Vec<u8>
 }
 
 #[derive(Clone)]
@@ -88,19 +83,12 @@ pub trait PacketListener {
 }
 
 lazy_static!(
-    static ref CLIENTS: Mutex<Vec<Connection>> = Mutex::new(vec![]);
-    static ref PACKETS_RECEIVED: Mutex<Vec<RawPacketOld >> = Mutex::new(vec![]);
-    static ref PACKETS_TO_SEND: Mutex<Vec<PacketToSend>> = Mutex::new(vec![]);
     static ref LISTENERS: Mutex<Vec<Box<dyn PacketListener + Send>>> = Mutex::new(vec![]);
-    static ref LOGGIN_IN: Mutex<Vec<LoggingIn>> = Mutex::new(vec![]);
+    static ref LOGGING_IN: Mutex<Vec<LoggingIn>> = Mutex::new(vec![]);
 );
 
 pub fn register_listener(listener: impl PacketListener + Send + 'static) {
     LISTENERS.lock().unwrap().push(Box::new(listener));
-}
-
-pub fn send_packet(connection_uuid: Uuid, packet: Vec<u8>) {
-    PACKETS_TO_SEND.lock().unwrap().push(PacketToSend {client: connection_uuid, packet});
 }
 
 pub fn start() {
@@ -123,11 +111,14 @@ pub fn start() {
                 }
             };
 
-            let mut logging_in_clients = LOGGIN_IN.lock().unwrap();
+            let mut logging_in_clients = LOGGING_IN.lock().unwrap();
 
             for logging_in in logging_in_clients.iter() {
                 if addr.ip().eq(&logging_in.addr.ip()) {
-                    stream.write(&Packet::DisconnectLogin { reason: ChatComponent::new_text("Just one client logging in per time!".to_owned()) }.serialize().unwrap());
+                    let mut packet = Packet::DisconnectLogin { reason: ChatComponent::new_text("Just one client logging in per time!".to_owned()) }.serialize().unwrap();
+                    packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
+                    stream.write(&packet);
+                    stream.flush();
                     stream.shutdown(Shutdown::Both);
                     continue 'outer;
                 }
@@ -160,7 +151,7 @@ pub fn start() {
                     };
 
                     if read == 0 {
-                        let mut logging_in = LOGGIN_IN.lock().unwrap();
+                        let mut logging_in = LOGGING_IN.lock().unwrap();
                         let index = match logging_in.iter().position(|x| x.uuid.eq(&client.uuid)) {
                             Some(t) => t,
                             None => break
@@ -207,16 +198,6 @@ pub fn start() {
 
 pub fn tick_read_packets() {
 
-}
-
-fn get_stream(uuid: Uuid, connections: &mut Vec<Connection>) -> Option<&mut Connection> {
-    for connection in connections {
-        if connection.properties.uuid == uuid {
-            return Some(connection);
-        }
-    }
-
-    None
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {
