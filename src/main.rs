@@ -4,6 +4,7 @@ mod utils;
 mod net;
 mod data_writer;
 mod game;
+pub mod player;
 
 fn main() {
     net::network_manager::start();

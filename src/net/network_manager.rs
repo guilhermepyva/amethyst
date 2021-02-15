@@ -15,6 +15,8 @@ use aes::Aes128;
 use crate::data_writer::DataWriter;
 use aes::cipher::StreamCipher;
 use crate::packets::Packet;
+use crate::player;
+use crate::player::{Player, PlayerConnection};
 
 const BUFFER_SIZE: usize = 8192;
 
@@ -32,9 +34,10 @@ pub struct LoggingInClient {
     pub state: ConnectionState,
     pub next_packet: Option<Vec<u8>>,
     pub nickname: Option<String>,
-    pub shared_secret: Option<Vec<u8>>,
     pub verify_token: Option<Vec<u8>>,
-    pub cfb8: Option<Cfb8<Aes128>>
+    pub cfb8: Option<Cfb8<Aes128>>,
+    pub profile_uuid: Option<Uuid>,
+    pub logged_in: bool
 }
 
 pub struct LoggingIn {
@@ -130,9 +133,10 @@ pub fn start() {
                 state: ConnectionState::Handshaking,
                 next_packet: None,
                 nickname: None,
-                shared_secret: None,
                 verify_token: None,
-                cfb8: None
+                cfb8: None,
+                profile_uuid: None,
+                logged_in: false
             };
             logging_in_clients.push(LoggingIn {uuid: client.uuid, addr});
 
@@ -188,7 +192,23 @@ pub fn start() {
                         }
                         packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
                         stream.write(packet);
-                        client.next_packet = None;
+                        if client.logged_in {
+                            let mut logging_in = LOGGING_IN.lock().unwrap();
+                            let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
+                            let connection = logging_in.remove(index);
+                            player::PLAYERS.lock().unwrap().push(Player {
+                                connection: PlayerConnection {
+                                    addr: connection.addr,
+                                    stream
+                                },
+                                uuid: client.profile_uuid.unwrap(),
+                                nickname: client.nickname.unwrap(),
+                                encryption: client.cfb8.unwrap()
+                            });
+                            break;
+                        } else {
+                            client.next_packet = None;
+                        }
                     }
                 }
             });
@@ -197,7 +217,7 @@ pub fn start() {
 }
 
 pub fn tick_read_packets() {
-
+    
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {

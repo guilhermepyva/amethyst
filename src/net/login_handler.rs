@@ -16,6 +16,7 @@ use aes::cipher::NewStreamCipher;
 use regex::Regex;
 use rustc_serialize::hex::ToHex;
 use openssl::sha::Sha1;
+use std::str::FromStr;
 
 pub enum PacketResult {
     Ok(Packet),
@@ -89,22 +90,53 @@ pub fn handle(packet: Packet, client: &mut LoggingInClient, stream: &mut TcpStre
                 }
             };
             let shared_secret = extract_vector(&decrypted_shared_secret, 0, shared_secret_length);
+
             client.cfb8 = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
-            client.shared_secret = Some(shared_secret);
-            client.next_packet = Some(Packet::LoginSuccess {
-                uuid: Uuid::new_v4(),
-                nickname: client.nickname.as_ref().unwrap().clone()
-            }.serialize().unwrap());
+
             let mut sha1 = Sha1::new();
             sha1.update(b"");
-            sha1.update(&client.shared_secret.as_ref().unwrap());
+            sha1.update(&shared_secret);
             sha1.update(&RSA.public_key_to_der().unwrap());
 
             let test = reqwest::blocking::Client::new();
-            let response = test.get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
-                .send()
-                .unwrap();
-            println!("{}", response.text().unwrap())
+            let response = match test.get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
+                .send() {
+                Ok(ok) => ok,
+                Err(e) => {
+                    println!("Error while contacting sessionserver.mojang.com to login a player: {}, {}", client.nickname.as_ref().unwrap(), e);
+                    client.disconnect(stream, "An error occured while contacting Mojang.".to_owned());
+                    return;
+                }
+            };
+            let response_code = response.status().as_u16();
+            if response_code == 204 {
+                client.disconnect(stream, "Client not authenticated.".to_owned());
+                return;
+            }
+            let json = match response.text() {
+                Ok(ok) => {
+                    match json::parse(&ok) {
+                        Ok(ok) => ok,
+                        Err(e) => {
+                            println!("Error while parsing login response to json: {}, {}", client.nickname.as_ref().unwrap(), e);
+                            client.disconnect(stream, "An error occured while contacting Mojang.".to_owned());
+                            return;
+                        }
+                    }
+                },
+                Err(e) => {
+                    println!("Error while parsing login response to text: {}, {}", client.nickname.as_ref().unwrap(), e);
+                    client.disconnect(stream, "An error occured while contacting Mojang.".to_owned());
+                    return;
+                }
+            };
+
+            client.next_packet = Some(Packet::LoginSuccess {
+                uuid: Uuid::from_str(json["id"].as_str().unwrap()).unwrap(),
+                nickname: json["name"].as_str().unwrap().to_owned()
+            }.serialize().unwrap());
+            client.profile_uuid = Some(Uuid::from_str(json["id"].as_str().unwrap()).unwrap());
+            client.logged_in = true;
         }
         _ => {}
     }
