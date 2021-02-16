@@ -1,12 +1,16 @@
+use std::sync::{Arc, Mutex};
+use crate::player::PlayerList;
+
 mod packets;
 mod data_reader;
 mod utils;
 mod net;
 mod data_writer;
 mod game;
-pub mod player;
+mod player;
 
 fn main() {
-    net::network_manager::start();
-    game::engine::start().join().expect("couldn't join thread in main thread");
+    let players: PlayerList = Arc::new(Mutex::new(Vec::new()));
+    net::network_manager::start(players.clone());
+    game::engine::start(players.clone()).join().expect("couldn't join thread in main thread");
 }

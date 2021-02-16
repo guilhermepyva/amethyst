@@ -1,7 +1,5 @@
-use crate::packets;
 use crate::utils::arrays;
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
-use lazy_static::lazy_static;
 use uuid::Uuid;
 use std::sync::{Mutex, Arc};
 use io::Read;
@@ -15,10 +13,10 @@ use aes::Aes128;
 use crate::data_writer::DataWriter;
 use aes::cipher::StreamCipher;
 use crate::packets::Packet;
-use crate::player;
-use crate::player::{Player, PlayerConnection};
-
-const BUFFER_SIZE: usize = 1024;
+use crate::player::{Player, PlayerConnection, PlayerList};
+use crate::game::engine::SyncEnvironment;
+use login_handler::HandleResult;
+use openssl::rsa::Rsa;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
@@ -32,12 +30,10 @@ pub struct LoggingInClient {
     pub uuid: Uuid,
     pub addr: SocketAddr,
     pub state: ConnectionState,
-    pub next_packet: Option<Vec<u8>>,
     pub nickname: Option<String>,
     pub verify_token: Option<Vec<u8>>,
     pub cfb8: Option<Cfb8<Aes128>>,
-    pub profile_uuid: Option<Uuid>,
-    pub logged_in: bool
+    pub profile_uuid: Option<Uuid>
 }
 
 pub struct LoggingIn {
@@ -45,27 +41,17 @@ pub struct LoggingIn {
     pub addr: SocketAddr
 }
 
+pub type LoggingInList = Arc<Mutex<Vec<LoggingIn>>>;
+
 impl LoggingInClient {
-    pub fn disconnect(&self, stream: &mut TcpStream, reason: String) {
-        let mut packet = Packet::DisconnectLogin { reason: ChatComponent::new_text(reason) }.serialize().unwrap();
+    pub fn disconnect(&mut self, stream: &mut TcpStream, reason: String, logging_in: &mut Vec<LoggingIn>) {
+        let mut packet = Packet::DisconnectLogin {reason: ChatComponent::new_text(reason)}.serialize().unwrap();
         packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
         stream.write(&packet);
         stream.flush();
         stream.shutdown(Shutdown::Both);
-        let mut logging_in = LOGGING_IN.lock().unwrap();
         let index = logging_in.iter().position(|x| x.uuid.eq(&self.uuid)).unwrap();
         logging_in.remove(index);
-    }
-}
-
-struct Connection {
-    properties: Arc<LoggingInClient>,
-    stream: TcpStream
-}
-
-impl Connection {
-    fn read_stream(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.read(buf)
     }
 }
 
@@ -75,26 +61,11 @@ pub struct RawPacket {
     pub data: Vec<u8>
 }
 
-#[derive(Clone)]
-struct PacketToSend {
-    client: Uuid,
-    packet: Vec<u8>
-}
-
-pub trait PacketListener {
-    fn received(&self, client: Arc<LoggingInClient>, packet: &packets::Packet);
-}
-
-lazy_static!(
-    static ref LISTENERS: Mutex<Vec<Box<dyn PacketListener + Send>>> = Mutex::new(vec![]);
-    static ref LOGGING_IN: Mutex<Vec<LoggingIn>> = Mutex::new(vec![]);
-);
-
-pub fn register_listener(listener: impl PacketListener + Send + 'static) {
-    LISTENERS.lock().unwrap().push(Box::new(listener));
-}
-
-pub fn start() {
+pub fn start(players: PlayerList) {
+    let logging_in: LoggingInList = Arc::new(Mutex::new(Vec::new()));
+    unsafe {
+        login_handler::RSA = Some(Rsa::generate(1024).unwrap());
+    }
     let server = match TcpListener::bind("0.0.0.0:25565") {
         Ok(t) => t,
         Err(e) => {
@@ -114,9 +85,9 @@ pub fn start() {
                 }
             };
 
-            let mut logging_in_clients = LOGGING_IN.lock().unwrap();
+            let mut logging_in_lock = logging_in.lock().unwrap();
 
-            for logging_in in logging_in_clients.iter() {
+            for logging_in in logging_in_lock.iter() {
                 if addr.ip().eq(&logging_in.addr.ip()) {
                     let mut packet = Packet::DisconnectLogin { reason: ChatComponent::new_text("Just one client logging in per time!".to_owned()) }.serialize().unwrap();
                     packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
@@ -131,17 +102,17 @@ pub fn start() {
                 uuid: Uuid::new_v4(),
                 addr,
                 state: ConnectionState::Handshaking,
-                next_packet: None,
                 nickname: None,
                 verify_token: None,
                 cfb8: None,
-                profile_uuid: None,
-                logged_in: false
+                profile_uuid: None
             };
-            logging_in_clients.push(LoggingIn {uuid: client.uuid, addr});
+            logging_in_lock.push(LoggingIn {uuid: client.uuid, addr});
 
-            drop(logging_in_clients);
+            drop(logging_in_lock);
 
+            let logging_in = logging_in.clone();
+            let players = players.clone();
             std::thread::spawn(move || {
                 let mut buf: [u8; 512] = [0; 512];
                 'outer: loop {
@@ -149,13 +120,13 @@ pub fn start() {
                         Ok(t) => t,
                         Err(e) => {
                             println!("An error occurred while reading data in Minecraft Client {}: {}", client.addr.ip(),e.to_string());
-                            client.disconnect(&mut stream, "An error occurred while reading data from Socket.".to_owned());
+                            client.disconnect(&mut stream, "An error occurred while reading data from Socket.".to_owned(), &mut logging_in.lock().unwrap());
                             break;
                         }
                     };
 
                     if read == 0 {
-                        let mut logging_in = LOGGING_IN.lock().unwrap();
+                        let mut logging_in = logging_in.lock().unwrap();
                         let index = match logging_in.iter().position(|x| x.uuid.eq(&client.uuid)) {
                             Some(t) => t,
                             None => break
@@ -169,7 +140,7 @@ pub fn start() {
                     let packets = match read_packets(&mut reader, read) {
                         Ok(t) => t,
                         Err(_e) => {
-                            client.disconnect(&mut stream, "Packets corrupted, closing connection.".to_owned());
+                            client.disconnect(&mut stream, "Packets corrupted, closing connection.".to_owned(), &mut logging_in.lock().unwrap());
                             break;
                         }
                     };
@@ -177,37 +148,43 @@ pub fn start() {
                         let packet = match Packet::read(raw_packet.id, &mut DataReader::new(&raw_packet.data), client.state) {
                             Ok(packet) => packet,
                             Err(string) => {
-                                client.disconnect(&mut stream, string.to_owned());
+                                client.disconnect(&mut stream, string.to_owned(), &mut logging_in.lock().unwrap());
                                 break 'outer;
                             }
                         };
 
-                        login_handler::handle(packet, &mut client, &mut stream);
-                    }
-
-                    if client.next_packet.is_some() {
-                        let packet = client.next_packet.as_mut().unwrap();
-                        if client.cfb8.is_some() {
-                            client.cfb8.as_mut().unwrap().encrypt(packet);
-                        }
-                        packet.splice(0..0, DataWriter::get_varint(packet.len() as u32));
-                        stream.write(packet);
-                        if client.logged_in {
-                            let mut logging_in = LOGGING_IN.lock().unwrap();
-                            let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
-                            let connection = logging_in.remove(index);
-                            player::PLAYERS.lock().unwrap().push(Player {
-                                connection: PlayerConnection {
-                                    addr: connection.addr,
-                                    stream
-                                },
-                                uuid: client.profile_uuid.unwrap(),
-                                nickname: client.nickname.unwrap(),
-                                encryption: client.cfb8.unwrap()
-                            });
-                            break;
-                        } else {
-                            client.next_packet = None;
+                        let result = login_handler::handle(packet, &mut client);
+                        match result {
+                            HandleResult::SendPacket(packet) => {
+                                let mut packet_binary = packet.serialize().unwrap();
+                                if client.cfb8.is_some() {
+                                    client.cfb8.as_mut().unwrap().encrypt(&mut packet_binary);
+                                }
+                                packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
+                                stream.write(&packet_binary);
+                                if let Packet::LoginSuccess{nickname, uuid} = packet {
+                                    let mut logging_in = logging_in.lock().unwrap();
+                                    let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
+                                    let connection = logging_in.remove(index);
+                                    drop(logging_in);
+                                    players.lock().unwrap().push(Player {
+                                        connection: PlayerConnection {
+                                            addr: connection.addr,
+                                            stream
+                                        },
+                                        uuid: uuid.clone(),
+                                        nickname: nickname.clone(),
+                                        encryption: client.cfb8.unwrap()
+                                    });
+                                    break 'outer;
+                                }
+                            }
+                            HandleResult::Disconnect(message) => {
+                                let message = message.to_owned();
+                                client.disconnect(&mut stream, message, &mut logging_in.lock().unwrap());
+                                break 'outer;
+                            }
+                            HandleResult::Nothing => {}
                         }
                     }
                 }
@@ -216,8 +193,8 @@ pub fn start() {
     }).expect("couldn't open thread");
 }
 
-pub fn tick_read_packets() {
-
+pub fn tick_read_packets(sync_env: SyncEnvironment) {
+    
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {

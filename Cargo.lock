@@ -47,7 +47,6 @@ dependencies = [
  "aes",
  "cfb8",
  "json",
- "lazy_static",
  "openssl",
  "rand",
  "regex",
