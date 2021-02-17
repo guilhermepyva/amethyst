@@ -54,7 +54,7 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
             client.verify_token = Some(verify_token.clone());
             HandleResult::SendPacket(Packet::EncryptionRequest {
                 server: String::new(),
-                public_key_length: public_key.len() as u32,
+                public_key_length: public_key.len() as i32,
                 public_key,
                 verify_token_length: 4,
                 verify_token

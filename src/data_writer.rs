@@ -8,11 +8,11 @@ impl DataWriter {
     }
 
     pub fn write_string(&mut self, string: &String) {
-        self.write_varint(string.len() as u32);
+        self.write_varint(string.len() as i32);
         self.data.append(&mut string.as_bytes().to_vec());
     }
 
-    pub fn write_varint(&mut self, mut value: u32) {
+    pub fn write_varint(&mut self, mut value: i32) {
         loop {
             let mut temp = (value & 0b01111111) as u8;
             value >>= 7;

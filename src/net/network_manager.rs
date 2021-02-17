@@ -5,7 +5,7 @@ use std::sync::{Mutex, Arc};
 use io::Read;
 use std::io;
 use crate::data_reader::DataReader;
-use std::io::Write;
+use std::io::{Write, ErrorKind};
 use crate::game::chat::ChatComponent;
 use crate::net::login_handler;
 use cfb8::Cfb8;
@@ -17,6 +17,7 @@ use crate::player::{Player, PlayerConnection, PlayerList};
 use crate::game::engine::SyncEnvironment;
 use login_handler::HandleResult;
 use openssl::rsa::Rsa;
+use std::process::exit;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
@@ -70,7 +71,7 @@ pub fn start(players: PlayerList) {
         Ok(t) => t,
         Err(e) => {
             println!("Error while binding server: {}", e);
-            return;
+            exit(0);
         }
     };
     println!("Aguardando conexões");
@@ -166,15 +167,18 @@ pub fn start(players: PlayerList) {
                                     let mut logging_in = logging_in.lock().unwrap();
                                     let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
                                     let connection = logging_in.remove(index);
+                                    stream.set_nonblocking(true);
                                     drop(logging_in);
                                     players.lock().unwrap().push(Player {
                                         connection: PlayerConnection {
                                             addr: connection.addr,
-                                            stream
+                                            stream,
+                                            encryption: client.cfb8.unwrap(),
+                                            shutdown: false,
+                                            disconnect: None
                                         },
                                         uuid: uuid.clone(),
-                                        nickname: nickname.clone(),
-                                        encryption: client.cfb8.unwrap()
+                                        nickname: nickname.clone()
                                     });
                                     break 'outer;
                                 }
@@ -193,8 +197,45 @@ pub fn start(players: PlayerList) {
     }).expect("couldn't open thread");
 }
 
-pub fn tick_read_packets(sync_env: SyncEnvironment) {
-    
+const BUFFER: Vec<u8> = Vec::new();
+
+pub fn tick_read_packets(sync_env: &mut SyncEnvironment) {
+    let mut i = 0;
+    while i != sync_env.players.len() {
+        let player: &mut Player = &mut sync_env.players[i];
+
+        if player.connection.shutdown {
+            if player.connection.disconnect.is_some() {
+                player.connection.send_packet(Packet::DisconnectPlay {reason: player.connection.disconnect.clone().unwrap()});
+            }
+
+            player.connection.stream.flush();
+            player.connection.stream.shutdown(Shutdown::Both);
+            sync_env.players.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+
+    for mut x in sync_env.players.iter_mut() {
+        BUFFER.clear();
+        println!("reading");
+        x.connection.disconnect(ChatComponent::new_text("nao quero vc aqui simples".to_owned()));
+        let read = match x.connection.stream.read_to_end(&mut BUFFER) {
+            Ok(t) => t,
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                continue;
+            },
+            Err(e) => {
+                println!("error {}", e.to_string());
+                continue;
+            }
+        };
+
+        if read == 0 {
+            x.connection.shutdown();
+        }
+    }
 }
 
 fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {

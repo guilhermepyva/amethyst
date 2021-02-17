@@ -18,9 +18,9 @@ pub enum Packet{
     LoginStart { nickname: String },
     EncryptionRequest {
         server: String,
-        public_key_length: u32,
+        public_key_length: i32,
         public_key: Vec<u8>,
-        verify_token_length: u32,
+        verify_token_length: i32,
         verify_token: Vec<u8>
     },
     DisconnectLogin {
@@ -115,7 +115,7 @@ impl Packet {
                 writer.write_string(&reason.to_string());
             }
             Packet::DisconnectPlay { reason } => {
-                writer.write_u8(0x19);
+                writer.write_u8(0x40);
                 writer.write_string(&reason.to_string());
             }
             Packet::StatusResponse { json } => {
@@ -128,7 +128,7 @@ impl Packet {
             }
             Packet::LoginSuccess { nickname, uuid } => {
                 writer.write_u8(0x02);
-                writer.write_data(&uuid.as_bytes().to_vec());
+                writer.write_string(&uuid.to_hyphenated().to_string());
                 writer.write_string(nickname)
             }
             _ => return Err("Can't serialize this packet")

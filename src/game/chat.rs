@@ -1,6 +1,6 @@
 use json::JsonValue;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ChatComponent {
     json: JsonValue
 }
