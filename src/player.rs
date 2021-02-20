@@ -12,7 +12,8 @@ use std::io::Write;
 pub struct Player {
     pub connection: PlayerConnection,
     pub uuid: Uuid,
-    pub nickname: String
+    pub nickname: String,
+    pub join_game: bool
 }
 
 pub struct PlayerConnection {

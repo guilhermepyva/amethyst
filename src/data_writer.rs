@@ -1,3 +1,5 @@
+use bytes::BufMut;
+
 pub struct DataWriter {
     pub data: Vec<u8>
 }
@@ -31,12 +33,20 @@ impl DataWriter {
         self.data.push(value)
     }
 
-    pub fn write_i64(&mut self, mut value: i64) {
-        for _x in 0..8 {
-            let temp = (value & 0b00000000) as u8;
-            value >>= 8;
-            self.data.push(temp);
-        }
+    pub fn write_i8(&mut self, value: i8) {
+        self.data.push(value as u8)
+    }
+
+    pub fn write_i32(&mut self, value: i32) {
+        self.data.put_i32(value);
+    }
+
+    pub fn write_i64(&mut self, value: i64) {
+        self.data.put_i64(value);
+    }
+
+    pub fn write_bool(&mut self, value: bool) {
+        self.data.push(if value {0x01} else {0x00})
     }
 
     pub fn write_data(&mut self, data: &Vec<u8>) {

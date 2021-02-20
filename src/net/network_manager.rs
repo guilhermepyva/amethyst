@@ -20,6 +20,7 @@ use openssl::rsa::Rsa;
 use std::process::exit;
 use std::time::Duration;
 use crate::net::packet_listener::{PacketListenerStruct, PacketListener};
+use crate::game::player_join::handle_join;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
@@ -147,6 +148,7 @@ pub fn start(players: PlayerList) {
                             break;
                         }
                     };
+
                     for raw_packet in packets {
                         let packet = match Packet::read(raw_packet.id, &mut DataReader::new(&raw_packet.data), client.state) {
                             Ok(packet) => packet,
@@ -165,12 +167,16 @@ pub fn start(players: PlayerList) {
                                     client.cfb8.as_mut().unwrap().encrypt(&mut packet_binary);
                                 }
                                 stream.write(&packet_binary);
+
                                 if let Packet::LoginSuccess{nickname, uuid} = packet {
                                     let mut logging_in = logging_in.lock().unwrap();
+
                                     let index = logging_in.iter().position(|x| x.uuid.eq(&client.uuid)).unwrap();
                                     let connection = logging_in.remove(index);
-                                    stream.set_nonblocking(true);
                                     drop(logging_in);
+
+                                    stream.set_nonblocking(true);
+
                                     players.lock().unwrap().push(Player {
                                         connection: PlayerConnection {
                                             addr: connection.addr,
@@ -180,7 +186,8 @@ pub fn start(players: PlayerList) {
                                             disconnect: None
                                         },
                                         uuid: uuid.clone(),
-                                        nickname: nickname.clone()
+                                        nickname: nickname.clone(),
+                                        join_game: true
                                     });
                                     break 'outer;
                                 }
@@ -220,6 +227,12 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
     }
 
     for mut player in sync_env.players.iter_mut() {
+        if player.join_game {
+            handle_join(player);
+            player.join_game = false;
+            continue;
+        }
+
         BUFFER.clear();
         let read = match player.connection.stream.read_to_end(&mut BUFFER) {
             Ok(t) => t,
