@@ -7,33 +7,28 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub enum Packet{
-    Handshake{
+    //Handshake
+    Handshake {
         protocol_version: i32,
         server_address: String,
         server_port: u16,
         next_state: u8
     },
+
+    //Status
     StatusRequest,
-    Ping { ping: i64 },
-    LoginStart { nickname: String },
+    Ping {ping: i64},
+    StatusResponse {json: JsonValue},
+    Pong {pong: i64},
+
+    //Login
+    LoginStart {nickname: String},
     EncryptionRequest {
         server: String,
         public_key_length: i32,
         public_key: Vec<u8>,
         verify_token_length: i32,
         verify_token: Vec<u8>
-    },
-    DisconnectLogin {
-        reason: ChatComponent
-    },
-    DisconnectPlay {
-        reason: ChatComponent
-    },
-    StatusResponse {
-        json: JsonValue
-    },
-    Pong {
-        pong: i64
     },
     EncryptionResponse {
         shared_secret_length: i32,
@@ -44,26 +39,18 @@ pub enum Packet{
     LoginSuccess {
         uuid: Uuid,
         nickname: String
-    }
+    },
+    DisconnectLogin {reason: ChatComponent},
+
+    //Play
+    DisconnectPlay {reason: ChatComponent}
 }
 
 impl Packet {
     pub fn read<'a>(id: i32, reader: &mut DataReader, state: ConnectionState) -> Result<Packet, &'a str> {
         match state {
-            ConnectionState::Handshaking => {
+            ConnectionState::Play => {
                 match id {
-                    0x00 => Ok(Packet::Handshake {
-                            protocol_version: reader.read_varint()?,
-                            server_address: reader.read_string()?,
-                            server_port: reader.read_u16()?,
-                            next_state: reader.read_u8()?, }),
-                    _ => Err("You were supposed to send the handshake packet.")
-                }
-            }
-            ConnectionState::Status => {
-                match id {
-                    0x00 => Ok(Packet::StatusRequest),
-                    0x01 => Ok(Packet::Ping { ping: reader.read_i64()? }),
                     _ => Err("Inexistent packet ID")
                 }
             }
@@ -85,8 +72,20 @@ impl Packet {
                     _ => Err("Inexistent packet ID")
                 }
             }
-            ConnectionState::Play => {
+            ConnectionState::Handshaking => {
                 match id {
+                    0x00 => Ok(Packet::Handshake {
+                            protocol_version: reader.read_varint()?,
+                            server_address: reader.read_string()?,
+                            server_port: reader.read_u16()?,
+                            next_state: reader.read_u8()?, }),
+                    _ => Err("You were supposed to send the handshake packet.")
+                }
+            }
+            ConnectionState::Status => {
+                match id {
+                    0x00 => Ok(Packet::StatusRequest),
+                    0x01 => Ok(Packet::Ping { ping: reader.read_i64()? }),
                     _ => Err("Inexistent packet ID")
                 }
             }

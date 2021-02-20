@@ -18,6 +18,8 @@ use crate::game::engine::SyncEnvironment;
 use login_handler::HandleResult;
 use openssl::rsa::Rsa;
 use std::process::exit;
+use std::time::Duration;
+use crate::net::packet_listener::{PacketListenerStruct, PacketListener};
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
@@ -138,7 +140,7 @@ pub fn start(players: PlayerList) {
 
                     let data_vec = arrays::extract_vector(&buf, 0, read);
                     let mut reader = DataReader::new(&data_vec);
-                    let packets = match read_packets(&mut reader, read) {
+                    let packets = match read_packets(&mut reader) {
                         Ok(t) => t,
                         Err(_e) => {
                             client.disconnect(&mut stream, "Packets corrupted, closing connection.".to_owned(), &mut logging_in.lock().unwrap());
@@ -158,10 +160,10 @@ pub fn start(players: PlayerList) {
                         match result {
                             HandleResult::SendPacket(packet) => {
                                 let mut packet_binary = packet.serialize().unwrap();
+                                packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
                                 if client.cfb8.is_some() {
                                     client.cfb8.as_mut().unwrap().encrypt(&mut packet_binary);
                                 }
-                                packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
                                 stream.write(&packet_binary);
                                 if let Packet::LoginSuccess{nickname, uuid} = packet {
                                     let mut logging_in = logging_in.lock().unwrap();
@@ -199,7 +201,7 @@ pub fn start(players: PlayerList) {
 
 const BUFFER: Vec<u8> = Vec::new();
 
-pub fn tick_read_packets(sync_env: &mut SyncEnvironment) {
+pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListenerStruct>) {
     let mut i = 0;
     while i != sync_env.players.len() {
         let player: &mut Player = &mut sync_env.players[i];
@@ -217,31 +219,63 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment) {
         }
     }
 
-    for mut x in sync_env.players.iter_mut() {
+    for mut player in sync_env.players.iter_mut() {
         BUFFER.clear();
-        println!("reading");
-        x.connection.disconnect(ChatComponent::new_text("nao quero vc aqui simples".to_owned()));
-        let read = match x.connection.stream.read_to_end(&mut BUFFER) {
+        let read = match player.connection.stream.read_to_end(&mut BUFFER) {
             Ok(t) => t,
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 continue;
             },
             Err(e) => {
-                println!("error {}", e.to_string());
+                println!("An error occurred while reading stream of player {}, error: {}", player.nickname, e.to_string());
                 continue;
             }
         };
 
         if read == 0 {
-            x.connection.shutdown();
+            player.connection.shutdown();
+        }
+
+        player.connection.encryption.decrypt(&mut BUFFER);
+        let buffer_ref = &BUFFER;
+        let mut reader = DataReader::new(buffer_ref);
+        let packets = match read_packets(&mut reader) {
+            Ok(t) => t,
+            Err(_e) => {
+                player.connection.disconnect(ChatComponent::new_text("Packets corrupted, closing connection.".to_owned()));
+                break;
+            }
+        };
+
+        for raw_packet in packets {
+            let packet = match Packet::read(raw_packet.id, &mut DataReader::new(&raw_packet.data), ConnectionState::Play) {
+                Ok(packet) => packet,
+                Err(string) => {
+                    player.connection.disconnect(ChatComponent::new_text(string.to_owned()));
+                    break;
+                }
+            };
+
+            for listener in packet_listeners {
+                if listener.packet_id == raw_packet.id {
+                    listener.listener.listen(&packet, player);
+                }
+            }
         }
     }
 }
 
-fn read_packets<'a>(reader: &mut DataReader, read: usize) -> Result<Vec<RawPacket>, &'a str> {
+pub struct KeepAliveListener {}
+impl PacketListener for KeepAliveListener {
+    fn listen(&self, packet: &Packet, player: &mut Player) {
+        println!("keep alive porra")
+    }
+}
+
+fn read_packets<'a>(reader: &mut DataReader) -> Result<Vec<RawPacket>, &'a str> {
     let mut vec = vec![];
 
-    while reader.cursor != read {
+    while reader.cursor != reader.data.len() {
         let length = reader.read_varint()?;
         let length_length = reader.cursor;
         let id = reader.read_varint()?;
