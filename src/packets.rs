@@ -4,10 +4,9 @@ use crate::data_writer::DataWriter;
 use crate::game::chat::ChatComponent;
 use json::JsonValue;
 use uuid::Uuid;
+use crate::game::position::Position;
 
-#[derive(Debug)]
 pub enum Packet{
-    //Handshake
     Handshake {
         protocol_version: i32,
         server_address: String,
@@ -53,7 +52,40 @@ pub enum Packet{
         level_type: String,
         reduced_debug_info: bool
     },
+    SpawnPosition {location: Position},
+    HeldItemChange {slot: u8},
+    PlayerInfo {
+        action_id: i32,
+        players: Vec<PlayerInfoPlayer>
+    },
     DisconnectPlay {reason: ChatComponent}
+}
+
+pub struct PlayerInfoPlayer {
+    pub uuid: Uuid,
+    pub action: PlayerInfoAction
+}
+
+pub enum PlayerInfoAction {
+    AddPlayer {
+        name: String,
+        properties: Vec<PlayerInfoProperties>,
+        gamemode: i32,
+        ping: i32,
+        display_name: Option<ChatComponent>
+    },
+    UpdateGameMode {gamemode: i32},
+    UpdateLatency {ping: i32},
+    UpdateDisplayName {
+        display_name: Option<ChatComponent>
+    },
+    RemovePlayer
+}
+
+pub struct PlayerInfoProperties {
+    pub name: String,
+    pub value: String,
+    pub signature: Option<String>
 }
 
 impl Packet {
@@ -162,6 +194,67 @@ impl Packet {
                 writer.write_u8(*max_players);
                 writer.write_string(level_type);
                 writer.write_bool(*reduced_debug_info);
+            }
+            Packet::SpawnPosition {location} => {
+                writer.write_u8(0x05);
+                writer.write_position(location);
+            }
+            Packet::HeldItemChange {slot} => {
+                writer.write_u8(0x09);
+                writer.write_u8(*slot);
+            }
+            Packet::PlayerInfo {action_id, players} => {
+                writer.write_u8(0x38);
+                writer.write_varint(*action_id);
+                writer.write_varint(players.len() as i32);
+                for player in players {
+                    writer.write_data(&player.uuid.as_bytes().to_vec());
+                    match &player.action {
+                        PlayerInfoAction::AddPlayer {
+                            name,
+                            properties,
+                            gamemode,
+                            ping,
+                            display_name
+                        } => {
+                            writer.write_string(name);
+                            writer.write_varint(properties.len() as i32);
+                            for property in properties {
+                                writer.write_string(&property.name);
+                                writer.write_string(&property.value);
+                                if property.signature.is_some() {
+                                    writer.write_bool(true);
+                                    writer.write_string(property.signature.as_ref().unwrap());
+                                } else {
+                                    writer.write_bool(false);
+                                }
+                            }
+                            writer.write_varint(*gamemode);
+                            writer.write_varint(*ping);
+                            if display_name.is_some() {
+                                writer.write_bool(true);
+                                writer.write_string(&display_name.as_ref().unwrap().to_string());
+                            } else {
+                                writer.write_bool(false);
+                            }
+                        }
+                        PlayerInfoAction::UpdateGameMode {gamemode} => {
+                            writer.write_varint(*gamemode);
+                        }
+                        PlayerInfoAction::UpdateLatency {ping} => {
+                            writer.write_varint(*ping);
+                        }
+                        PlayerInfoAction::UpdateDisplayName {display_name} => {
+                            if display_name.is_some() {
+                                writer.write_bool(true);
+                                writer.write_string(&display_name.as_ref().unwrap().to_string());
+                            } else {
+                                writer.write_bool(false);
+                            }
+                        }
+                        PlayerInfoAction::RemovePlayer => {}
+                    };
+                }
             }
             _ => return Err("Can't serialize this packet")
         }

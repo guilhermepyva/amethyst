@@ -1,4 +1,6 @@
 use bytes::BufMut;
+use crate::game::position::Position;
+use rustc_serialize::Encodable;
 
 pub struct DataWriter {
     pub data: Vec<u8>
@@ -51,6 +53,10 @@ impl DataWriter {
 
     pub fn write_data(&mut self, data: &Vec<u8>) {
         self.data.append(&mut data.clone());
+    }
+
+    pub fn write_position(&mut self, position: &Position) {
+        self.data.put_i64(position.encode());
     }
 
     pub fn get_varint(mut value: u32) -> Vec<u8> {
