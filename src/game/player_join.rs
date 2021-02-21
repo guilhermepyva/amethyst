@@ -1,8 +1,6 @@
 use crate::player::Player;
 use crate::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction};
 use crate::game::position::Position;
-use std::thread::Thread;
-use std::time::Duration;
 
 /*
 36 - join game
@@ -18,14 +16,13 @@ use std::time::Duration;
 52 - player position and look
 61 - world border
 78 - time update
-19 - player position and rotation
-21 - player movement
-21 - player movement
+19 - window items
+21 - player movement / set slot
+21 - player movement / set slot
  */
 
 pub fn handle_join(player: &mut Player) {
     player.connection.send_packet(&Packet::KeepAlive {id: 69});
-    std::thread::sleep(Duration::from_millis(200));
     player.connection.send_packet(&Packet::JoinGame {
         entity_id: 5,
         gamemode: 0,
