@@ -16,7 +16,7 @@ use crate::game::position::Position;
 52 - player position and look
 61 - world border
 78 - time update
-19 - player position and rotation
+19 - window items
 21 - player movement
 21 - player movement
  */
