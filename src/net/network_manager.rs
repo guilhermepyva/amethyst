@@ -304,7 +304,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
 pub struct KeepAliveListener {}
 impl PacketListener for KeepAliveListener {
     fn listen(&self, packet: &Packet, player: &mut Player) {
-        player.connection.send_packet(&Packet::KeepAlive {id: 5});
+        player.connection.keep_alive = 0;
     }
 }
 
