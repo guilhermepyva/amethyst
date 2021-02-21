@@ -118,8 +118,8 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
 
             client.profile_uuid = Some(Uuid::from_str(json["id"].as_str().unwrap()).unwrap());
             HandleResult::SendPacket(Packet::LoginSuccess {
-                uuid: Uuid::default(),
-                nickname: "".to_owned()
+                uuid: Uuid::from_str(json["id"].as_str().unwrap()).unwrap(),
+                nickname: json["name"].as_str().unwrap().to_owned()
             })
         }
         _ => HandleResult::Nothing
