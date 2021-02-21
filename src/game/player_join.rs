@@ -17,8 +17,8 @@ use crate::game::position::Position;
 61 - world border
 78 - time update
 19 - window items
-21 - player movement
-21 - player movement
+21 - player movement / set slot
+21 - player movement / set slot
  */
 
 pub fn handle_join(player: &mut Player) {
