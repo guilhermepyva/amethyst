@@ -58,7 +58,15 @@ pub enum Packet{
         action_id: i32,
         players: Vec<PlayerInfoPlayer>
     },
-    DisconnectPlay {reason: ChatComponent}
+    DisconnectPlay {reason: ChatComponent},
+    PlayerPositionAndLook {
+        x: f64,
+        y: f64,
+        z: f64,
+        yaw: f32,
+        pitch: f32,
+        flags: u8
+    }
 }
 
 pub struct PlayerInfoPlayer {
@@ -94,7 +102,7 @@ impl Packet {
             ConnectionState::Play => {
                 match id {
                     0x00 => Ok(Packet::KeepAlive {id: reader.read_varint()?}),
-                    _ => Err("Inexistent packet ID")
+                    _ => Ok(Packet::KeepAlive {id: 0})
                 }
             }
             ConnectionState::Login => {
@@ -255,6 +263,22 @@ impl Packet {
                         PlayerInfoAction::RemovePlayer => {}
                     };
                 }
+            }
+            Packet::PlayerPositionAndLook {
+                x,
+                y,
+                z,
+                yaw,
+                pitch,
+                flags
+            } => {
+                writer.write_u8(0x08);
+                writer.write_f64(*x);
+                writer.write_f64(*y);
+                writer.write_f64(*z);
+                writer.write_f32(*yaw);
+                writer.write_f32(*pitch);
+                writer.write_u8(*flags);
             }
             _ => return Err("Can't serialize this packet")
         }

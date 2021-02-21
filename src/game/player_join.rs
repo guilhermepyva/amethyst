@@ -1,6 +1,8 @@
 use crate::player::Player;
 use crate::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction};
 use crate::game::position::Position;
+use std::thread::Thread;
+use std::time::Duration;
 
 /*
 36 - join game
@@ -22,6 +24,8 @@ use crate::game::position::Position;
  */
 
 pub fn handle_join(player: &mut Player) {
+    player.connection.send_packet(Packet::KeepAlive {id: 69});
+    std::thread::sleep(Duration::from_millis(200));
     player.connection.send_packet(Packet::JoinGame {
         entity_id: 5,
         gamemode: 0,
@@ -37,7 +41,6 @@ pub fn handle_join(player: &mut Player) {
         z: 0
     }});
     player.connection.send_packet(Packet::HeldItemChange {slot: 0});
-    player.connection.send_packet(Packet::KeepAlive {id: 0});
     player.connection.send_packet(Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
         uuid: player.uuid.clone(),
         action: PlayerInfoAction::AddPlayer {
@@ -48,4 +51,12 @@ pub fn handle_join(player: &mut Player) {
             display_name: None
         }
     })});
+    player.connection.send_packet(Packet::PlayerPositionAndLook {
+        x: 0.0,
+        y: 50.0,
+        z: 0.0,
+        yaw: 0.0,
+        pitch: 0.0,
+        flags: 0
+    });
 }

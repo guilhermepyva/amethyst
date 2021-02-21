@@ -80,7 +80,8 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
             };
             let shared_secret = extract_vector(&decrypted_shared_secret, 0, shared_secret_length);
 
-            client.cfb8 = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
+            client.encode = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
+            client.decode = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
 
             let mut sha1 = Sha1::new();
             sha1.update(b"");

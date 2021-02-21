@@ -19,7 +19,8 @@ pub struct Player {
 pub struct PlayerConnection {
     pub addr: SocketAddr,
     pub stream: TcpStream,
-    pub encryption: Cfb8<Aes128>,
+    pub encoding: Cfb8<Aes128>,
+    pub decoding: Cfb8<Aes128>,
     pub shutdown: bool,
     pub disconnect: Option<ChatComponent>
 }
@@ -37,7 +38,7 @@ impl PlayerConnection {
     pub fn send_packet(&mut self, packet: Packet) {
         let mut packet_binary = packet.serialize().unwrap();
         packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
-        self.encryption.encrypt(&mut packet_binary);
+        self.encoding.encrypt(&mut packet_binary);
         self.stream.write(&packet_binary);
     }
 }

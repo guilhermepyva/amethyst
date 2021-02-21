@@ -11,7 +11,7 @@ use crate::net::login_handler;
 use cfb8::Cfb8;
 use aes::Aes128;
 use crate::data_writer::DataWriter;
-use aes::cipher::StreamCipher;
+use aes::cipher::{StreamCipher, NewStreamCipher};
 use crate::packets::Packet;
 use crate::player::{Player, PlayerConnection, PlayerList};
 use crate::game::engine::SyncEnvironment;
@@ -36,7 +36,8 @@ pub struct LoggingInClient {
     pub state: ConnectionState,
     pub nickname: Option<String>,
     pub verify_token: Option<Vec<u8>>,
-    pub cfb8: Option<Cfb8<Aes128>>,
+    pub encode: Option<Cfb8<Aes128>>,
+    pub decode: Option<Cfb8<Aes128>>,
     pub profile_uuid: Option<Uuid>
 }
 
@@ -108,7 +109,8 @@ pub fn start(players: PlayerList) {
                 state: ConnectionState::Handshaking,
                 nickname: None,
                 verify_token: None,
-                cfb8: None,
+                encode: None,
+                decode: None,
                 profile_uuid: None
             };
             logging_in_lock.push(LoggingIn {uuid: client.uuid, addr});
@@ -163,8 +165,8 @@ pub fn start(players: PlayerList) {
                             HandleResult::SendPacket(packet) => {
                                 let mut packet_binary = packet.serialize().unwrap();
                                 packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
-                                if client.cfb8.is_some() {
-                                    client.cfb8.as_mut().unwrap().encrypt(&mut packet_binary);
+                                if client.encode.is_some() {
+                                    client.encode.as_mut().unwrap().encrypt(&mut packet_binary);
                                 }
                                 stream.write(&packet_binary);
 
@@ -181,7 +183,8 @@ pub fn start(players: PlayerList) {
                                         connection: PlayerConnection {
                                             addr: connection.addr,
                                             stream,
-                                            encryption: client.cfb8.unwrap(),
+                                            encoding: client.encode.unwrap(),
+                                            decoding: client.decode.unwrap(),
                                             shutdown: false,
                                             disconnect: None
                                         },
@@ -206,10 +209,12 @@ pub fn start(players: PlayerList) {
     }).expect("couldn't open thread");
 }
 
-const BUFFER: Vec<u8> = Vec::new();
+const BUFFER: [u8; 1024] = [0; 1024];
 
 pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListenerStruct>) {
     let mut i = 0;
+    let mut buffer = [0u8; 1024];
+    println!("{}", sync_env.players.len());
     while i != sync_env.players.len() {
         let player: &mut Player = &mut sync_env.players[i];
 
@@ -220,7 +225,8 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
 
             player.connection.stream.flush();
             player.connection.stream.shutdown(Shutdown::Both);
-            sync_env.players.remove(i);
+            let player = sync_env.players.remove(i);
+            drop(player);
         } else {
             i += 1;
         }
@@ -233,8 +239,7 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
             continue;
         }
 
-        BUFFER.clear();
-        let read = match player.connection.stream.read_to_end(&mut BUFFER) {
+        let read = match player.connection.stream.read(&mut buffer) {
             Ok(t) => t,
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 continue;
@@ -249,9 +254,9 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
             player.connection.shutdown();
         }
 
-        player.connection.encryption.decrypt(&mut BUFFER);
-        let buffer_ref = &BUFFER;
-        let mut reader = DataReader::new(buffer_ref);
+        let mut data_vec = arrays::extract_vector(&buffer, 0, read);
+        player.connection.decoding.decrypt(&mut data_vec);
+        let mut reader = DataReader::new(&data_vec);
         let packets = match read_packets(&mut reader) {
             Ok(t) => t,
             Err(_e) => {

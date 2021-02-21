@@ -47,6 +47,14 @@ impl DataWriter {
         self.data.put_i64(value);
     }
 
+    pub fn write_f32(&mut self, value: f32) {
+        self.data.put_f32(value);
+    }
+
+    pub fn write_f64(&mut self, value: f64) {
+        self.data.put_f64(value);
+    }
+
     pub fn write_bool(&mut self, value: bool) {
         self.data.push(if value {0x01} else {0x00})
     }
