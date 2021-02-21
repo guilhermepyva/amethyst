@@ -13,12 +13,13 @@ pub fn start(players: PlayerList) -> JoinHandle<()> {
         let packet_listeners = vec![
             PacketListenerStruct {packet_id: 0x00, listener: Box::new(KeepAliveListener {})}
         ];
+        let mut keep_alive_ticks = 0u8;
 
         loop {
             let mut sync_environment =  SyncEnvironment {
                 players: players.lock().unwrap()
             };
-            network_manager::tick_read_packets(&mut sync_environment, &packet_listeners);
+            network_manager::tick(&mut sync_environment, &packet_listeners, &mut keep_alive_ticks);
 
             drop(sync_environment);
             //You need to drop everything before this sleep

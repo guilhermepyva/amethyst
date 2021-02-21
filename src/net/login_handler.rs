@@ -88,8 +88,7 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
             sha1.update(&shared_secret);
             sha1.update(&rsa.public_key_to_der().unwrap());
 
-            let test = reqwest::blocking::Client::new();
-            let response = match test.get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
+            let response = match reqwest::blocking::Client::new().get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
                 .send() {
                 Ok(ok) => ok,
                 Err(e) => {
@@ -119,8 +118,8 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
 
             client.profile_uuid = Some(Uuid::from_str(json["id"].as_str().unwrap()).unwrap());
             HandleResult::SendPacket(Packet::LoginSuccess {
-                uuid: Uuid::from_str(json["id"].as_str().unwrap()).unwrap(),
-                nickname: json["name"].as_str().unwrap().to_owned()
+                uuid: Uuid::default(),
+                nickname: "".to_owned()
             })
         }
         _ => HandleResult::Nothing

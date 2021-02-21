@@ -24,9 +24,9 @@ use std::time::Duration;
  */
 
 pub fn handle_join(player: &mut Player) {
-    player.connection.send_packet(Packet::KeepAlive {id: 69});
+    player.connection.send_packet(&Packet::KeepAlive {id: 69});
     std::thread::sleep(Duration::from_millis(200));
-    player.connection.send_packet(Packet::JoinGame {
+    player.connection.send_packet(&Packet::JoinGame {
         entity_id: 5,
         gamemode: 0,
         dimension: 0,
@@ -35,13 +35,13 @@ pub fn handle_join(player: &mut Player) {
         level_type: "teste".to_string(),
         reduced_debug_info: false
     });
-    player.connection.send_packet(Packet::SpawnPosition {location: Position {
+    player.connection.send_packet(&Packet::SpawnPosition {location: Position {
         x: 0,
         y: 50,
         z: 0
     }});
-    player.connection.send_packet(Packet::HeldItemChange {slot: 0});
-    player.connection.send_packet(Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
+    player.connection.send_packet(&Packet::HeldItemChange {slot: 0});
+    player.connection.send_packet(&Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
         uuid: player.uuid.clone(),
         action: PlayerInfoAction::AddPlayer {
             name: player.nickname.clone(),
@@ -51,7 +51,7 @@ pub fn handle_join(player: &mut Player) {
             display_name: None
         }
     })});
-    player.connection.send_packet(Packet::PlayerPositionAndLook {
+    player.connection.send_packet(&Packet::PlayerPositionAndLook {
         x: 0.0,
         y: 50.0,
         z: 0.0,

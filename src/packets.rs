@@ -5,8 +5,11 @@ use crate::game::chat::ChatComponent;
 use json::JsonValue;
 use uuid::Uuid;
 use crate::game::position::Position;
+use crate::packets::Packet::InexistentPacket;
 
 pub enum Packet{
+    InexistentPacket,
+
     Handshake {
         protocol_version: i32,
         server_address: String,
@@ -102,7 +105,7 @@ impl Packet {
             ConnectionState::Play => {
                 match id {
                     0x00 => Ok(Packet::KeepAlive {id: reader.read_varint()?}),
-                    _ => Ok(Packet::KeepAlive {id: 0})
+                    _ => Ok(InexistentPacket)
                 }
             }
             ConnectionState::Login => {

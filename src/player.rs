@@ -22,7 +22,8 @@ pub struct PlayerConnection {
     pub encoding: Cfb8<Aes128>,
     pub decoding: Cfb8<Aes128>,
     pub shutdown: bool,
-    pub disconnect: Option<ChatComponent>
+    pub disconnect: Option<ChatComponent>,
+    pub keep_alive: u16
 }
 
 impl PlayerConnection {
@@ -35,7 +36,7 @@ impl PlayerConnection {
         self.shutdown = true;
     }
 
-    pub fn send_packet(&mut self, packet: Packet) {
+    pub fn send_packet(&mut self, packet: &Packet) {
         let mut packet_binary = packet.serialize().unwrap();
         packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
         self.encoding.encrypt(&mut packet_binary);

@@ -186,7 +186,8 @@ pub fn start(players: PlayerList) {
                                             encoding: client.encode.unwrap(),
                                             decoding: client.decode.unwrap(),
                                             shutdown: false,
-                                            disconnect: None
+                                            disconnect: None,
+                                            keep_alive: 0
                                         },
                                         uuid: uuid.clone(),
                                         nickname: nickname.clone(),
@@ -211,22 +212,29 @@ pub fn start(players: PlayerList) {
 
 const BUFFER: [u8; 1024] = [0; 1024];
 
-pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListenerStruct>) {
+pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListenerStruct>, keep_alive_ticks: &mut u8) {
+    //Keep Alive
+    let mut send_keep_alive = false;
+    if *keep_alive_ticks < 20 {
+        *keep_alive_ticks += 1;
+    } else {
+        send_keep_alive = true;
+        *keep_alive_ticks = 0;
+    }
+
     let mut i = 0;
     let mut buffer = [0u8; 1024];
-    println!("{}", sync_env.players.len());
     while i != sync_env.players.len() {
         let player: &mut Player = &mut sync_env.players[i];
 
         if player.connection.shutdown {
             if player.connection.disconnect.is_some() {
-                player.connection.send_packet(Packet::DisconnectPlay {reason: player.connection.disconnect.clone().unwrap()});
+                player.connection.send_packet(&Packet::DisconnectPlay {reason: player.connection.disconnect.clone().unwrap()});
             }
 
             player.connection.stream.flush();
             player.connection.stream.shutdown(Shutdown::Both);
-            let player = sync_env.players.remove(i);
-            drop(player);
+            sync_env.players.remove(i);
         } else {
             i += 1;
         }
@@ -238,6 +246,8 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
             player.join_game = false;
             continue;
         }
+
+        player.connection.keep_alive += 1;
 
         let read = match player.connection.stream.read(&mut buffer) {
             Ok(t) => t,
@@ -280,13 +290,21 @@ pub fn tick_read_packets(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<
                 }
             }
         }
+
+        if player.connection.keep_alive == 601 {
+            player.connection.disconnect(ChatComponent::new_text("Timed out".to_owned()));
+        }
+
+        if send_keep_alive && !player.connection.shutdown {
+            player.connection.send_packet(&Packet::KeepAlive {id: 0});
+        }
     }
 }
 
 pub struct KeepAliveListener {}
 impl PacketListener for KeepAliveListener {
     fn listen(&self, packet: &Packet, player: &mut Player) {
-        println!("keep alive porra")
+        player.connection.send_packet(&Packet::KeepAlive {id: 5});
     }
 }
 
