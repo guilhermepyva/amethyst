@@ -1,5 +1,5 @@
 use crate::player::Player;
-use crate::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction};
+use crate::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction};
 use crate::game::position::Position;
 
 /*
@@ -17,15 +17,13 @@ use crate::game::position::Position;
 61 - world border
 78 - time update
 19 - window items
-21 - player movement / set slot
-21 - player movement / set slot
  */
 
 pub fn handle_join(player: &mut Player) {
     player.connection.send_packet(&Packet::KeepAlive {id: 69});
     player.connection.send_packet(&Packet::JoinGame {
         entity_id: 5,
-        gamemode: 0,
+        gamemode: 1,
         dimension: 0,
         difficulty: 0,
         max_players: 255,
@@ -37,7 +35,7 @@ pub fn handle_join(player: &mut Player) {
         y: 50,
         z: 0
     }});
-    player.connection.send_packet(&Packet::HeldItemChange {slot: 0});
+    player.connection.send_packet(&Packet::HeldItemChange {slot: 5});
     player.connection.send_packet(&Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
         uuid: player.uuid.clone(),
         action: PlayerInfoAction::AddPlayer {
@@ -56,4 +54,5 @@ pub fn handle_join(player: &mut Player) {
         pitch: 0.0,
         flags: 0
     });
+    player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 10f64}})
 }

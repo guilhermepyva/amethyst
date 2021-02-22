@@ -69,6 +69,40 @@ pub enum Packet{
         yaw: f32,
         pitch: f32,
         flags: u8
+    },
+    WorldBorder {
+        action: WorldBorderAction
+    }
+}
+
+pub enum WorldBorderAction {
+    SetSize {
+        radius: f64
+    },
+    LerpSize {
+        old_radius: f64,
+        new_radius: f64,
+        speed: i32
+    },
+    SetCenter {
+        x: f64,
+        z: f64
+    },
+    Initialize {
+        x: f64,
+        z: f64,
+        old_radius: f64,
+        new_radius: f64,
+        speed: i64,
+        portal_teleport_boundary: i32,
+        warning_time: i32,
+        warning_blocks: i32
+    },
+    SetWarningTime {
+        warning_time: i32
+    },
+    SetWarningBlocks {
+        warning_blocks: i32
     }
 }
 
@@ -282,6 +316,54 @@ impl Packet {
                 writer.write_f32(*yaw);
                 writer.write_f32(*pitch);
                 writer.write_u8(*flags);
+            },
+            Packet::WorldBorder {action} => {
+                writer.write_u8(0x44);
+                match action {
+                    WorldBorderAction::SetSize {radius} => {
+                        writer.write_varint(0);
+                        writer.write_f64(*radius);
+                    }
+                    WorldBorderAction::LerpSize {old_radius, new_radius, speed} => {
+                        writer.write_varint(1);
+                        writer.write_f64(*old_radius);
+                        writer.write_f64(*new_radius);
+                        writer.write_varint(*speed);
+                    }
+                    WorldBorderAction::SetCenter {x, z} => {
+                        writer.write_varint(2);
+                        writer.write_f64(*x);
+                        writer.write_f64(*z);
+                    }
+                    WorldBorderAction::Initialize {
+                        x,
+                        z,
+                        old_radius,
+                        new_radius,
+                        speed,
+                        portal_teleport_boundary,
+                        warning_time,
+                        warning_blocks
+                    } => {
+                        writer.write_varint(3);
+                        writer.write_f64(*x);
+                        writer.write_f64(*z);
+                        writer.write_f64(*old_radius);
+                        writer.write_f64(*new_radius);
+                        writer.write_varlong(*speed);
+                        writer.write_varint(*portal_teleport_boundary);
+                        writer.write_varint(*warning_time);
+                        writer.write_varint(*warning_blocks);
+                    }
+                    WorldBorderAction::SetWarningTime {warning_time} => {
+                        writer.write_varint(4);
+                        writer.write_varint(*warning_time);
+                    }
+                    WorldBorderAction::SetWarningBlocks {warning_blocks} => {
+                        writer.write_varint(5);
+                        writer.write_varint(*warning_blocks);
+                    }
+                }
             }
             _ => return Err("Can't serialize this packet")
         }

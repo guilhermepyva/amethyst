@@ -31,6 +31,21 @@ impl DataWriter {
         }
     }
 
+    pub fn write_varlong(&mut self, mut value: i64) {
+        loop {
+            let mut temp = (value & 0b01111111) as u8;
+            value >>= 7;
+            if value != 0 {
+                temp |= 0b10000000;
+            }
+            self.data.push(temp);
+
+            if value == 0 {
+                break
+            }
+        }
+    }
+
     pub fn write_u8(&mut self, value: u8) {
         self.data.push(value)
     }
