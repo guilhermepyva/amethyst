@@ -6,6 +6,7 @@ use json::JsonValue;
 use uuid::Uuid;
 use crate::game::position::Position;
 use crate::game::packets::Packet::InexistentPacket;
+use crate::game::nbt::NBTTag;
 
 pub enum Packet{
     InexistentPacket,
@@ -84,10 +85,10 @@ pub enum Packet{
 }
 
 pub struct Slot {
-    present: bool,
-    item_id: Option<i32>,
-    item_count: Option<i8>,
-    //TODO NBT field
+    pub item_id: i16,
+    pub item_count: Option<i8>,
+    pub item_damage: Option<i16>,
+    pub nbt: Option<NBTTag>
 }
 
 pub enum WorldBorderAction {
@@ -390,11 +391,15 @@ impl Packet {
                 writer.write_u8(*window_id);
                 writer.write_i16(slots.len() as i16);
                 for slot in slots {
-                    writer.write_bool(slot.present);
-                    if slot.present {
-                        writer.write_varint(slot.item_id.unwrap());
+                    writer.write_i16(slot.item_id);
+                    if slot.item_id > 0 {
                         writer.write_i8(slot.item_count.unwrap());
-                        //TODO implement NBT writing
+                        writer.write_i16(slot.item_damage.unwrap());
+                        if slot.nbt.is_none() {
+                            writer.write_u8(0);
+                        } else {
+                            slot.nbt.as_ref().unwrap().write(&mut writer.data, Some(&String::new()));
+                        }
                     }
                 }
             }

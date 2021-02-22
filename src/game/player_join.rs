@@ -1,6 +1,8 @@
 use crate::player::Player;
-use crate::game::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction};
+use crate::game::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction, Slot};
 use crate::game::position::Position;
+use crate::game::nbt::{NBTTag, CompoundElement};
+use crate::game::chat::ChatComponent;
 
 /*
 36 - join game
@@ -23,7 +25,7 @@ pub fn handle_join(player: &mut Player) {
     player.connection.send_packet(&Packet::KeepAlive {id: 69});
     player.connection.send_packet(&Packet::JoinGame {
         entity_id: 5,
-        gamemode: 1,
+        gamemode: 0,
         dimension: 0,
         difficulty: 0,
         max_players: 255,
@@ -56,5 +58,21 @@ pub fn handle_join(player: &mut Player) {
     });
     player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
     player.connection.send_packet(&Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
-    player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!()});
+    player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!(
+        Slot {
+            item_id: 1,
+            item_count: Some(1),
+            item_damage: Some(69),
+            nbt: Some(NBTTag::Compound {
+                compound: vec!(CompoundElement {
+                    name: "display".to_owned(),
+                    tag: NBTTag::Compound {
+                        compound: vec!(
+                            CompoundElement {name: "Name".to_owned(), tag: NBTTag::String {string: "Pyrocah".to_owned()}},
+                        )
+                    }
+                })
+            })
+        }
+    )});
 }
