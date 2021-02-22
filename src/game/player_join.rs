@@ -56,4 +56,5 @@ pub fn handle_join(player: &mut Player) {
     });
     player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
     player.connection.send_packet(&Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
+    player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!()});
 }

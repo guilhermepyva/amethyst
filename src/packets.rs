@@ -76,7 +76,18 @@ pub enum Packet{
     TimeUpdate {
         world_age: i64,
         time_of_day: i64
+    },
+    WindowItems {
+        window_id: u8,
+        slots: Vec<Slot>
     }
+}
+
+pub struct Slot {
+    present: bool,
+    item_id: Option<i32>,
+    item_count: Option<i8>,
+    //TODO NBT field
 }
 
 pub enum WorldBorderAction {
@@ -373,6 +384,19 @@ impl Packet {
                 writer.write_varint(0x03);
                 writer.write_i64(*world_age);
                 writer.write_i64(*time_of_day)
+            }
+            Packet::WindowItems {window_id, slots} => {
+                writer.write_varint(0x30);
+                writer.write_u8(*window_id);
+                writer.write_i16(slots.len() as i16);
+                for slot in slots {
+                    writer.write_bool(slot.present);
+                    if slot.present {
+                        writer.write_varint(slot.item_id.unwrap());
+                        writer.write_i8(slot.item_count.unwrap());
+                        //TODO implement NBT writing
+                    }
+                }
             }
             _ => return Err("Can't serialize this packet")
         }
