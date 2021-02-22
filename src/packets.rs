@@ -72,6 +72,10 @@ pub enum Packet{
     },
     WorldBorder {
         action: WorldBorderAction
+    },
+    TimeUpdate {
+        world_age: i64,
+        time_of_day: i64
     }
 }
 
@@ -364,6 +368,11 @@ impl Packet {
                         writer.write_varint(*warning_blocks);
                     }
                 }
+            }
+            Packet::TimeUpdate {world_age, time_of_day} => {
+                writer.write_varint(0x03);
+                writer.write_i64(*world_age);
+                writer.write_i64(*time_of_day)
             }
             _ => return Err("Can't serialize this packet")
         }
