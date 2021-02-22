@@ -3,7 +3,6 @@ use crate::player::PlayerList;
 use crate::net::packet_listener::PacketListenerStruct;
 use crate::net::network_manager::KeepAliveListener;
 
-mod packets;
 mod data_reader;
 mod utils;
 mod net;

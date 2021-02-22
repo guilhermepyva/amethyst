@@ -1,5 +1,5 @@
 use crate::player::Player;
-use crate::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction};
+use crate::game::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction};
 use crate::game::position::Position;
 
 /*

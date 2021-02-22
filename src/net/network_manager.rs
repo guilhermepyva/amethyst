@@ -12,7 +12,7 @@ use cfb8::Cfb8;
 use aes::Aes128;
 use crate::data_writer::DataWriter;
 use aes::cipher::{StreamCipher, NewStreamCipher};
-use crate::packets::Packet;
+use crate::game::packets::Packet;
 use crate::player::{Player, PlayerConnection, PlayerList};
 use crate::game::engine::SyncEnvironment;
 use login_handler::HandleResult;

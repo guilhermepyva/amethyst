@@ -1,5 +1,5 @@
 use crate::net::network_manager::{LoggingInClient, ConnectionState};
-use crate::packets::Packet;
+use crate::game::packets::Packet;
 use json::JsonValue;
 use json::number::Number;
 use crate::game::chat::ChatComponent;

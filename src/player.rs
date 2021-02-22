@@ -4,7 +4,7 @@ use uuid::Uuid;
 use cfb8::Cfb8;
 use aes::Aes128;
 use crate::game::chat::ChatComponent;
-use crate::packets::Packet;
+use crate::game::packets::Packet;
 use aes::cipher::StreamCipher;
 use crate::data_writer::DataWriter;
 use std::io::Write;

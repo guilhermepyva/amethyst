@@ -1,4 +1,4 @@
-use crate::packets::Packet;
+use crate::game::packets::Packet;
 use crate::player::Player;
 
 pub struct PacketListenerStruct {

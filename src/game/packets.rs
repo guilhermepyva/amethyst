@@ -5,7 +5,7 @@ use crate::game::chat::ChatComponent;
 use json::JsonValue;
 use uuid::Uuid;
 use crate::game::position::Position;
-use crate::packets::Packet::InexistentPacket;
+use crate::game::packets::Packet::InexistentPacket;
 
 pub enum Packet{
     InexistentPacket,
