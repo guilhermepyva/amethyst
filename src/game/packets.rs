@@ -8,7 +8,7 @@ use crate::game::position::Position;
 use crate::game::packets::Packet::InexistentPacket;
 use crate::game::nbt::NBTTag;
 
-pub enum Packet{
+pub enum Packet {
     InexistentPacket,
 
     Handshake {
@@ -81,6 +81,14 @@ pub enum Packet{
     WindowItems {
         window_id: u8,
         slots: Vec<Slot>
+    },
+    ChunkData {
+        x: i32,
+        y: i32,
+        ground_up_continuous: bool,
+        bitmask: u16,
+        //Tests only
+        data: Vec<u8>
     }
 }
 
@@ -402,6 +410,21 @@ impl Packet {
                         }
                     }
                 }
+            }
+            Packet::ChunkData {
+                x,
+                y,
+                ground_up_continuous,
+                bitmask,
+                data
+            } => {
+                writer.write_u8(0x21);
+                writer.write_i32(*x);
+                writer.write_i32(*y);
+                writer.write_bool(*ground_up_continuous);
+                writer.write_u16(*bitmask);
+                writer.write_varint((data.len() as i32));
+                writer.write_data(data);
             }
             _ => return Err("Can't serialize this packet")
         }

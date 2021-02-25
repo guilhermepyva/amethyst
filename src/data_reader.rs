@@ -15,7 +15,7 @@ impl DataReader<'_> {
 
     pub fn read_data_fixed<'a>(&mut self, length: usize) -> Result<Vec<u8>, &'a str> {
         if !self.check_lenght(length) {
-            return Err("data size is longer than datareader remaining bytes")
+            return Err("data size is longer than data reader remaining bytes")
         }
 
         let mut data = vec![0; length];

@@ -50,6 +50,14 @@ impl DataWriter {
         self.data.push(value)
     }
 
+    pub fn write_u16(&mut self, value: u16) {
+        self.data.put_u16(value)
+    }
+
+    pub fn write_u16_le(&mut self, value: u16) {
+        self.data.put_u16_le(value)
+    }
+
     pub fn write_i8(&mut self, value: i8) {
         self.data.push(value as u8)
     }

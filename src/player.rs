@@ -39,7 +39,6 @@ impl PlayerConnection {
     pub fn send_packet(&mut self, packet: &Packet) {
         let mut packet_binary = packet.serialize().unwrap();
         packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
-        println!("{:?}", packet_binary);
         self.encoding.encrypt(&mut packet_binary);
         self.stream.write(&packet_binary);
     }

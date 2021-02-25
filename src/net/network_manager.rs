@@ -145,8 +145,9 @@ pub fn start(players: PlayerList) {
                     let mut reader = DataReader::new(&data_vec);
                     let packets = match read_packets(&mut reader) {
                         Ok(t) => t,
-                        Err(_e) => {
-                            client.disconnect(&mut stream, "Packets corrupted, closing connection.".to_owned(), &mut logging_in.lock().unwrap());
+                        Err(e) => {
+                            client.disconnect(&mut stream, "Packets corrupted, closing connection. (login)".to_owned(), &mut logging_in.lock().unwrap());
+                            println!("A client sent corrupted packet, {}", e);
                             break;
                         }
                     };
@@ -223,7 +224,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
     }
 
     let mut i = 0;
-    let mut buffer = [0u8; 1024];
+    let mut buffer = [0u8; 5120];
     while i != sync_env.players.len() {
         let player: &mut Player = &mut sync_env.players[i];
 
@@ -269,8 +270,9 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
         let mut reader = DataReader::new(&data_vec);
         let packets = match read_packets(&mut reader) {
             Ok(t) => t,
-            Err(_e) => {
+            Err(e) => {
                 player.connection.disconnect(ChatComponent::new_text("Packets corrupted, closing connection.".to_owned()));
+                println!("A client sent corrupted packet, {}", e);
                 break;
             }
         };
@@ -312,9 +314,12 @@ fn read_packets<'a>(reader: &mut DataReader) -> Result<Vec<RawPacket>, &'a str> 
     let mut vec = vec![];
 
     while reader.cursor != reader.data.len() {
+        println!("reading length");
         let length = reader.read_varint()?;
+        println!("length read");
         let length_length = reader.cursor;
         let id = reader.read_varint()?;
+        println!("id read");
 
         vec.push(RawPacket {
             id,
