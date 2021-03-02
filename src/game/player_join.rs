@@ -1,9 +1,10 @@
-use crate::player::Player;
+use crate::game::player::Player;
 use crate::game::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction, Slot};
 use crate::game::position::Position;
 use crate::game::nbt::{NBTTag, CompoundElement};
 use crate::game::chat::ChatComponent;
 use crate::data_writer::DataWriter;
+use std::time::Duration;
 
 /*
 36 - join game
@@ -60,41 +61,47 @@ pub fn handle_join(player: &mut Player) {
     player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
     player.connection.send_packet(&Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
 
-    let bitmask = 0b0000000000000001 as u16;
+    let bitmask = 0b0000000000001000 as u16;
     let mut writer = DataWriter::new();
-    let mut blocks = [[[0i32; 16]; 16]; 16];
+    let mut blocks = [[[0u16; 16]; 16]; 16];
     let stone = (1 << 4) | 0;
+    let dirt = (3 << 4) | 0;
 
+    for z in 0..16 {
+        for x in 0..16 {
+            blocks[0][z][x] = stone;
+        }
+    }
+
+    player.connection.send_packet(&Packet::ChunkData {
+        bitmask,
+        ground_up_continuous: true,
+        x: 0,
+        y: 0,
+        data: write_chunk(&blocks, 12, 13)
+    });
+
+    let mut id = 256;
     for y in 0..16 {
         for z in 0..16 {
             for x in 0..16 {
-                writer.write_u16_le(stone);
+                blocks[y][z][x] = (id << 4) | 0;
+                id += 1;
             }
         }
     }
-    writer.write_varint(16);
-    writer.write_varint((16 * 16 * 16) * 2);
-    for x in 0..4096 {
-        writer.write_u8(0);
-    }
-    for x in 0..4096 {
-        writer.write_u8(0);
-    }
-    for x in 0..256 {
-        writer.write_u8(1);
-    }
 
-    for y in 0..3 {
-        for x in 0..3 {
-            player.connection.send_packet(&Packet::ChunkData {
-                bitmask,
-                ground_up_continuous: true,
-                x: y,
-                y: x,
-                data: writer.data.clone()
-            });
-        }
-    }
+    std::thread::sleep(Duration::from_secs(1));
+
+    let data = vec![0; (4096 * 2) + (4096 + 256)];
+
+    player.connection.send_packet(&Packet::ChunkData {
+        x: 0,
+        y: 0,
+        ground_up_continuous: false,
+        bitmask,
+        data: write_chunk(&blocks, 12, 13)
+    });
 
 
     // player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!(
@@ -114,4 +121,26 @@ pub fn handle_join(player: &mut Player) {
     //         })
     //     }
     // )});
+}
+
+pub fn write_chunk(blocks: &[[[u16; 16]; 16]; 16], block_light: u8, sky_light: u8) -> Vec<u8> {
+    let mut writer = DataWriter::new();
+    for y in 0..16 {
+        for z in 0..16 {
+            for x in 0..16 {
+                writer.write_u16_le(blocks[y][z][x]);
+            }
+        }
+    }
+    for x in 0..2048 {
+        writer.write_u8((block_light << 4) | block_light);
+    }
+    for x in 0..2048 {
+        writer.write_u8((sky_light << 4) | sky_light);
+    }
+    for x in 0..256 {
+        writer.write_u8(1);
+    }
+
+    writer.data
 }

@@ -1,5 +1,5 @@
 use crate::game::packets::Packet;
-use crate::player::Player;
+use crate::game::player::Player;
 
 pub struct PacketListenerStruct {
     pub packet_id: i32,

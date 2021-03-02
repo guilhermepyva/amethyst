@@ -3,8 +3,8 @@ pub struct ChunkPos {
     pub y: i32
 }
 
-pub struct Chunk {
-    pub blocks: [[[i32; 16]; 16]; 16]
+pub struct ChunkSection {
+    pub blocks: [[[u16; 16]; 16]; 16]
 }
 
 pub struct ChunkColumn {

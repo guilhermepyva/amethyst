@@ -13,7 +13,7 @@ use aes::Aes128;
 use crate::data_writer::DataWriter;
 use aes::cipher::{StreamCipher, NewStreamCipher};
 use crate::game::packets::Packet;
-use crate::player::{Player, PlayerConnection, PlayerList};
+use crate::game::player::{Player, PlayerConnection, PlayerList};
 use crate::game::engine::SyncEnvironment;
 use login_handler::HandleResult;
 use openssl::rsa::Rsa;
@@ -224,6 +224,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
     }
 
     let mut i = 0;
+    //TODO consertar o leitor usando buffer
     let mut buffer = [0u8; 5120];
     while i != sync_env.players.len() {
         let player: &mut Player = &mut sync_env.players[i];
@@ -314,12 +315,9 @@ fn read_packets<'a>(reader: &mut DataReader) -> Result<Vec<RawPacket>, &'a str> 
     let mut vec = vec![];
 
     while reader.cursor != reader.data.len() {
-        println!("reading length");
         let length = reader.read_varint()?;
-        println!("length read");
         let length_length = reader.cursor;
         let id = reader.read_varint()?;
-        println!("id read");
 
         vec.push(RawPacket {
             id,

@@ -5,3 +5,4 @@ pub mod position;
 pub mod packets;
 pub mod nbt;
 pub mod world;
+pub mod player;

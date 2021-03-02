@@ -1,7 +1,7 @@
 use std::time::Duration;
 use crate::net::network_manager;
 use std::thread::JoinHandle;
-use crate::player::{PlayerList, Player};
+use crate::game::player::{PlayerList, Player};
 use std::sync::MutexGuard;
 use crate::net::packet_listener::PacketListenerStruct;
 use crate::net::network_manager::KeepAliveListener;
