@@ -116,14 +116,40 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
                 }
             };
 
+            let data = match parse_json(json) {
+                Some(t) => t,
+                None => {
+                    println!("Error while parsing login response data to text: {}", client.nickname.as_ref().unwrap());
+                    return HandleResult::Disconnect("An error occured while contacting Mojang.")
+                }
+            };
+
             //TODO Arrumar login
             HandleResult::SendPacket(Packet::LoginSuccess {
-                uuid: Uuid::default(),
-                nickname: client.nickname.clone().unwrap()
+                uuid: data.0,
+                nickname: data.1.to_string()
             })
         }
         _ => HandleResult::Nothing
     }
+}
+
+fn parse_json(mut json: JsonValue) -> Option<(Uuid, String)> {
+    let uuid = match json["id"].as_str() {
+        Some(t) => t,
+        None => return None
+    };
+    let uuid = match Uuid::from_str(uuid) {
+        Ok(t) => t,
+        Err(e) => return None
+    };
+
+    let name = match json["name"].take_string() {
+        Some(t) => t,
+        None => return None
+    };
+
+    return Some((uuid, name));
 }
 
 pub static mut RSA: Option<Rsa<Private>> = None;

@@ -25,6 +25,7 @@ use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
  */
 
 pub fn handle_join(player: &mut Player) {
+    println!("Jogador {} entrou no servidor", player.nickname);
     player.connection.send_packet(&Packet::KeepAlive {id: 0});
     player.connection.send_packet(&Packet::JoinGame {
         entity_id: 0,
@@ -51,7 +52,6 @@ pub fn handle_join(player: &mut Player) {
             display_name: Option::from(ChatComponent::new_text(player.nickname.clone()))
         }
     })});
-    println!("{}", player.nickname);
     player.connection.send_packet(&Packet::PlayerPositionAndLook {
         x: 0.0,
         y: 50.0,
