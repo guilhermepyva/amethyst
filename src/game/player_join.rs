@@ -5,6 +5,7 @@ use crate::game::nbt::{NBTTag, CompoundElement};
 use crate::game::chat::ChatComponent;
 use crate::data_writer::DataWriter;
 use std::time::Duration;
+use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
 
 /*
 36 - join game
@@ -47,9 +48,10 @@ pub fn handle_join(player: &mut Player) {
             properties: vec!(),
             gamemode: 0,
             ping: 0,
-            display_name: None
+            display_name: Option::from(ChatComponent::new_text(player.nickname.clone()))
         }
     })});
+    println!("{}", player.nickname);
     player.connection.send_packet(&Packet::PlayerPositionAndLook {
         x: 0.0,
         y: 50.0,
@@ -65,6 +67,7 @@ pub fn handle_join(player: &mut Player) {
     let mut writer = DataWriter::new();
     let mut blocks = [[[0u16; 16]; 16]; 16];
     let stone = (1 << 4) | 0;
+    let torch = (50 << 4) | 5;
     let dirt = (3 << 4) | 0;
 
     for z in 0..16 {
@@ -72,36 +75,68 @@ pub fn handle_join(player: &mut Player) {
             blocks[0][z][x] = stone;
         }
     }
+    blocks[1][8][8] = torch;
+    blocks[1][8][7] = stone;
+
+    let mut matrix = [[0i8; 16]; 16];
+    let light_torch = PosValue::new(8, 8, 13);
+    PosValue::new(7, 8, -1).set(&mut matrix);
+    light_torch.set(&mut matrix);
+
+    ray_casting(&mut matrix, &light_torch);
+
+    let mut lightning = [[[5u8; 16]; 16]; 16];
+
+    for z in 0..16 {
+        for x in 0..16 {
+            if matrix[x][z] < 0 {
+                continue;
+            }
+            lightning[1][z][x] = matrix[x][z] as u8;
+        }
+    }
+
+    let mut block_light = [0u8; 2048];
+    let mut i = 0;
+    for y in 0..16 {
+        for z in 0..16 {
+            for x in (0..16).step_by(2) {
+                block_light[i] = ((lightning[y][z][x + 1] << 4) + lightning[y][z][x]);
+                i += 1;
+            }
+        }
+    }
+    let mut skylight = [0u8; 2048];
 
     player.connection.send_packet(&Packet::ChunkData {
         bitmask,
         ground_up_continuous: true,
         x: 0,
         y: 0,
-        data: write_chunk(&blocks, 12, 13)
+        data: write_chunk_light(&blocks, &block_light, &skylight)
     });
-
-    let mut id = 256;
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in 0..16 {
-                blocks[y][z][x] = (id << 4) | 0;
-                id += 1;
-            }
-        }
-    }
-
-    std::thread::sleep(Duration::from_secs(1));
-
-    let data = vec![0; (4096 * 2) + (4096 + 256)];
-
-    player.connection.send_packet(&Packet::ChunkData {
-        x: 0,
-        y: 0,
-        ground_up_continuous: false,
-        bitmask,
-        data: write_chunk(&blocks, 12, 13)
-    });
+    //
+    // let mut id = 256;
+    // for y in 0..16 {
+    //     for z in 0..16 {
+    //         for x in 0..16 {
+    //             blocks[y][z][x] = (id << 4) | 0;
+    //             id += 1;
+    //         }
+    //     }
+    // }
+    //
+    // std::thread::sleep(Duration::from_secs(1));
+    //
+    // let data = vec![0; (4096 * 2) + (4096 + 256)];
+    //
+    // player.connection.send_packet(&Packet::ChunkData {
+    //     x: 0,
+    //     y: 0,
+    //     ground_up_continuous: false,
+    //     bitmask,
+    //     data: write_chunk(&blocks, 12, 13)
+    // });
 
 
     // player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!(
@@ -121,6 +156,24 @@ pub fn handle_join(player: &mut Player) {
     //         })
     //     }
     // )});
+}
+
+pub fn write_chunk_light(blocks: &[[[u16; 16]; 16]; 16], block_light: &[u8; 2048], sky_light: &[u8; 2048]) -> Vec<u8> {
+    let mut writer = DataWriter::new();
+    for y in 0..16 {
+        for z in 0..16 {
+            for x in 0..16 {
+                writer.write_u16_le(blocks[y][z][x]);
+            }
+        }
+    }
+    writer.write_data(&block_light.to_vec());
+    writer.write_data(&sky_light.to_vec());
+    for x in 0..256 {
+        writer.write_u8(1);
+    }
+
+    writer.data
 }
 
 pub fn write_chunk(blocks: &[[[u16; 16]; 16]; 16], block_light: u8, sky_light: u8) -> Vec<u8> {

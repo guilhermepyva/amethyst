@@ -6,3 +6,4 @@ pub mod packets;
 pub mod nbt;
 pub mod world;
 pub mod player;
+pub mod ray_tracing;

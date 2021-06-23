@@ -16,6 +16,7 @@ aes = "0.6.0"
 regex = "1.4.3"
 rustc-serialize = "0.3.24"
 bytes = "1.0.1"
+reqwest = { version = "0.10.8", features = ["blocking", "json"] }
 
 [profile.release]
 lto = true

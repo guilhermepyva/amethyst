@@ -16,7 +16,6 @@ fn main() {
     let players: PlayerList = Arc::new(Mutex::new(Vec::new()));
     net::network_manager::start(players.clone());
 
-    println!("{}", Position {x: 50, y: 70, z: 50}.encode());
-    println!("{}", Position {x: 780, y: 450, z: 8000}.encode());
+    // net::https::test();
     game::engine::start(players.clone()).join().expect("couldn't join thread in main thread");
 }

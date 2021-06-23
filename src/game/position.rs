@@ -5,7 +5,7 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn encode(&self) -> i64 {
+    pub const fn encode(&self) -> i64 {
         ((self.x as i64 & 0x3FFFFFF) << 38) | ((self.y as i64 & 0xFFF) << 26) | (self.z as i64 & 0x3FFFFFF)
     }
 }
