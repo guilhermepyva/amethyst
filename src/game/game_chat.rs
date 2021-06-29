@@ -8,7 +8,7 @@ pub struct ChatListener {}
 
 impl PacketListener for ChatListener {
     fn listen(&self, packet: &Packet, player_index: usize, environment: &mut SyncEnvironment) {
-        let packet = match packet {
+        match packet {
             Packet::ClientChatMessage {message} => {
                 let name = environment.players[player_index].nickname.clone();
                 let packet = Packet::ServerChatMessage {

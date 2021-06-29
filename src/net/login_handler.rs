@@ -41,7 +41,7 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
             players["max"] = JsonValue::Number(Number::from(10 as u8));
             players["online"] = JsonValue::Number(Number::from(0 as u8));
             json["players"] = players;
-            json["description"] = ChatComponent::new_text("Servidor de Minecraft Amethyst".to_owned()).to_json();
+            json["description"] = ChatComponent::new_text("Amethyst Minecraft Server".to_owned()).to_json();
             HandleResult::SendPacket(Packet::StatusResponse { json })
         }
         Packet::Ping { ping } => HandleResult::SendPacket(Packet::Pong { pong: ping }),
