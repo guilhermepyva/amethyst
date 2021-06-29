@@ -129,7 +129,8 @@ impl DataReader<'_> {
         if string_lenght == 0 {
             return Ok(String::new())
         }
-        let vec = utils::arrays::extract_vector(self.data, self.cursor + 1, string_lenght + self.cursor + 1);
+
+        let vec = self.data[self.cursor + 1..string_lenght + self.cursor + 1].to_vec();
 
         self.cursor += string_lenght + 1;
 

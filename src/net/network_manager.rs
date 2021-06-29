@@ -35,7 +35,7 @@ pub struct LoggingInClient {
     pub addr: SocketAddr,
     pub state: ConnectionState,
     pub nickname: Option<String>,
-    pub verify_token: Option<Vec<u8>>,
+    pub verify_token: Option<[u8; 4]>,
     pub encode: Option<Cfb8<Aes128>>,
     pub decode: Option<Cfb8<Aes128>>,
     pub profile_uuid: Option<Uuid>
@@ -71,14 +71,15 @@ pub fn start(players: PlayerList) {
     unsafe {
         login_handler::RSA = Some(Rsa::generate(1024).unwrap());
     }
-    let server = match TcpListener::bind("0.0.0.0:25565") {
+    let addr = "0.0.0.0:25565";
+    let server = match TcpListener::bind(addr) {
         Ok(t) => t,
         Err(e) => {
             println!("Error while binding server: {}", e);
             exit(0);
         }
     };
-    println!("Aguardando conexões");
+    println!("Awaiting connections on {}", addr);
 
     std::thread::Builder::new().name("Amethyst - Client Handler Thread".to_owned()).spawn(move || {
         'outer: loop {
@@ -141,7 +142,7 @@ pub fn start(players: PlayerList) {
                         break;
                     }
 
-                    let data_vec = arrays::extract_vector(&buf, 0, read);
+                    let data_vec = buf[0..read].to_vec();
                     let mut reader = DataReader::new(&data_vec);
                     let packets = match read_packets(&mut reader) {
                         Ok(t) => t,
@@ -266,7 +267,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
             player.connection.shutdown();
         }
 
-        let mut data_vec = arrays::extract_vector(&buffer, 0, read);
+        let mut data_vec = buffer[0..read].to_vec();
         player.connection.decoding.decrypt(&mut data_vec);
         let mut reader = DataReader::new(&data_vec);
         let packets = match read_packets(&mut reader) {

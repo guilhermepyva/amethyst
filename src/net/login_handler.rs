@@ -49,9 +49,9 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
         Packet::LoginStart { nickname } => {
             client.nickname = Some(nickname);
             let public_key = get_rsa().public_key_to_der().unwrap();
-            let verify_token = rand::thread_rng().gen::<[u8; 4]>().to_vec();
+            let verify_token = rand::thread_rng().gen::<[u8; 4]>();
 
-            client.verify_token = Some(verify_token.clone());
+            client.verify_token = Some(verify_token);
             HandleResult::SendPacket(Packet::EncryptionRequest {
                 server: String::new(),
                 public_key_length: public_key.len() as i32,
@@ -67,7 +67,8 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
                 Ok(_t) => {},
                 Err(_e) => return HandleResult::Disconnect("Couldn't decrypt verify token")
             };
-            if !extract_vector(&decrypted_verify_token, 0, 4).eq(client.verify_token.as_ref().unwrap()) {
+
+            if !decrypted_verify_token[0..4].eq(&client.verify_token.unwrap()) {
                 return HandleResult::Disconnect("Verify token isn't the same")
             }
 
@@ -78,10 +79,10 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
                     return HandleResult::Disconnect("Couldn't decrypt shared secret")
                 }
             };
-            let shared_secret = extract_vector(&decrypted_shared_secret, 0, shared_secret_length);
+            let shared_secret = &decrypted_shared_secret[0..shared_secret_length];
 
-            client.encode = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
-            client.decode = Some(Cfb8::<Aes128>::new_var(&shared_secret, &shared_secret).unwrap());
+            client.encode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
+            client.decode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
 
             let mut sha1 = Sha1::new();
             sha1.update(b"");

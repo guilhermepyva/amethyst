@@ -31,7 +31,7 @@ pub enum Packet {
         public_key_length: i32,
         public_key: Vec<u8>,
         verify_token_length: i32,
-        verify_token: Vec<u8>
+        verify_token: [u8; 4]
     },
     EncryptionResponse {
         shared_secret_length: i32,
@@ -217,7 +217,7 @@ impl Packet {
                 writer.write_u8(0x01);
                 writer.write_string(server);
                 writer.write_varint(*public_key_length);
-                writer.write_data(public_key);
+                writer.write_vec_data(public_key);
                 writer.write_varint(*verify_token_length);
                 writer.write_data(verify_token);
             }
@@ -277,7 +277,7 @@ impl Packet {
                 writer.write_varint(*action_id);
                 writer.write_varint(players.len() as i32);
                 for player in players {
-                    writer.write_data(&player.uuid.as_bytes().to_vec());
+                    writer.write_vec_data(&player.uuid.as_bytes().to_vec());
                     match &player.action {
                         PlayerInfoAction::AddPlayer {
                             name,
@@ -424,7 +424,7 @@ impl Packet {
                 writer.write_bool(*ground_up_continuous);
                 writer.write_u16(*bitmask);
                 writer.write_varint((data.len() as i32));
-                writer.write_data(data);
+                writer.write_vec_data(data);
             }
             _ => return Err("Can't serialize this packet")
         }

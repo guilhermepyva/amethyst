@@ -6,6 +6,7 @@ use crate::game::chat::ChatComponent;
 use crate::data_writer::DataWriter;
 use std::time::Duration;
 use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
+use std::mem::size_of_val;
 
 /*
 36 - join game
@@ -25,7 +26,7 @@ use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
  */
 
 pub fn handle_join(player: &mut Player) {
-    println!("Jogador {} entrou no servidor", player.nickname);
+    println!("Player {} joined the server", player.nickname);
     player.connection.send_packet(&Packet::KeepAlive {id: 0});
     player.connection.send_packet(&Packet::JoinGame {
         entity_id: 0,
@@ -115,6 +116,7 @@ pub fn handle_join(player: &mut Player) {
         y: 0,
         data: write_chunk_light(&blocks, &block_light, &skylight)
     });
+
     //
     // let mut id = 256;
     // for y in 0..16 {
@@ -167,8 +169,8 @@ pub fn write_chunk_light(blocks: &[[[u16; 16]; 16]; 16], block_light: &[u8; 2048
             }
         }
     }
-    writer.write_data(&block_light.to_vec());
-    writer.write_data(&sky_light.to_vec());
+    writer.write_vec_data(&block_light.to_vec());
+    writer.write_vec_data(&sky_light.to_vec());
     for x in 0..256 {
         writer.write_u8(1);
     }

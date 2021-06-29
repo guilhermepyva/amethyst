@@ -86,8 +86,12 @@ impl DataWriter {
         self.data.push(if value {0x01} else {0x00})
     }
 
-    pub fn write_data(&mut self, data: &Vec<u8>) {
+    pub fn write_vec_data(&mut self, data: &Vec<u8>) {
         self.data.append(&mut data.clone());
+    }
+
+    pub fn write_data(&mut self, data: &[u8]) {
+        self.data.extend_from_slice(data);
     }
 
     pub fn write_position(&mut self, position: &Position) {
