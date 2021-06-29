@@ -8,7 +8,6 @@ use crate::game::position::Position;
 use std::mem::{size_of_val, size_of};
 
 mod data_reader;
-mod utils;
 mod net;
 mod data_writer;
 mod game;

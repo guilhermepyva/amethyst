@@ -6,7 +6,6 @@ use crate::game::chat::ChatComponent;
 use openssl::rsa::{Rsa, Padding};
 use openssl::pkey::Private;
 use rand::Rng;
-use crate::utils::arrays::extract_vector;
 use cfb8::Cfb8;
 use aes::Aes128;
 use uuid::Uuid;

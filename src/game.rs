@@ -7,3 +7,4 @@ pub mod nbt;
 pub mod world;
 pub mod player;
 pub mod ray_tracing;
+pub mod game_chat;

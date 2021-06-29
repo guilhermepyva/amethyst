@@ -1,5 +1,3 @@
-use crate::utils;
-
 pub struct DataReader<'a> {
     pub data: &'a Vec<u8>,
     pub cursor: usize

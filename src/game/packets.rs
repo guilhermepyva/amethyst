@@ -89,6 +89,11 @@ pub enum Packet {
         bitmask: u16,
         //Tests only
         data: Vec<u8>
+    },
+    ClientChatMessage { message: String },
+    ServerChatMessage {
+        component: ChatComponent,
+        pos: u8
     }
 }
 
@@ -163,6 +168,7 @@ impl Packet {
             ConnectionState::Play => {
                 match id {
                     0x00 => Ok(Packet::KeepAlive {id: reader.read_varint()?}),
+                    0x01 => Ok(Packet::ClientChatMessage {message: reader.read_string()?}),
                     _ => Ok(InexistentPacket)
                 }
             }
@@ -425,6 +431,11 @@ impl Packet {
                 writer.write_u16(*bitmask);
                 writer.write_varint((data.len() as i32));
                 writer.write_vec_data(data);
+            }
+            Packet::ServerChatMessage {component, pos} => {
+                writer.write_u8(0x02);
+                writer.write_string(&component.to_string());
+                writer.write_u8(*pos);
             }
             _ => return Err("Can't serialize this packet")
         }

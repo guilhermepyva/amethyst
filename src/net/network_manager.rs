@@ -1,4 +1,3 @@
-use crate::utils::arrays;
 use std::net::{TcpListener, TcpStream, SocketAddr, Shutdown};
 use uuid::Uuid;
 use std::sync::{Mutex, Arc};
@@ -21,6 +20,9 @@ use std::process::exit;
 use std::time::Duration;
 use crate::net::packet_listener::{PacketListenerStruct, PacketListener};
 use crate::game::player_join::handle_join;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::borrow::BorrowMut;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ConnectionState {
@@ -243,7 +245,11 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
         }
     }
 
-    for mut player in sync_env.players.iter_mut() {
+    let mut packets_to_listen = Vec::new();
+
+    for i in 0..sync_env.players.len() {
+        let mut player = &mut sync_env.players[i];
+
         if player.join_game {
             handle_join(player);
             player.join_game = false;
@@ -270,7 +276,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
         let mut data_vec = buffer[0..read].to_vec();
         player.connection.decoding.decrypt(&mut data_vec);
         let mut reader = DataReader::new(&data_vec);
-        let packets = match read_packets(&mut reader) {
+        let mut packets = match read_packets(&mut reader) {
             Ok(t) => t,
             Err(e) => {
                 player.connection.disconnect(ChatComponent::new_text("Packets corrupted, closing connection.".to_owned()));
@@ -288,11 +294,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
                 }
             };
 
-            for listener in packet_listeners {
-                if listener.packet_id == raw_packet.id {
-                    listener.listener.listen(&packet, player);
-                }
-            }
+            packets_to_listen.push((i, packet, raw_packet.id));
         }
 
         if player.connection.keep_alive == 601 {
@@ -303,12 +305,21 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
             player.connection.send_packet(&Packet::KeepAlive {id: 0});
         }
     }
+
+    for packet in packets_to_listen {
+        //TODO substituir por binary search
+        for packet_listener in packet_listeners {
+            if packet_listener.packet_id == packet.2 {
+                packet_listener.listener.listen(&packet.1, packet.0, sync_env);
+            }
+        }
+    }
 }
 
 pub struct KeepAliveListener {}
 impl PacketListener for KeepAliveListener {
-    fn listen(&self, packet: &Packet, player: &mut Player) {
-        player.connection.keep_alive = 0;
+    fn listen(&self, packet: &Packet, player_index: usize, environment: &mut SyncEnvironment) {
+        environment.players[player_index].connection.keep_alive = 0;
     }
 }
 
