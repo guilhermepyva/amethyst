@@ -1,3 +1,5 @@
+use std::convert::{TryFrom, TryInto};
+
 pub struct DataReader<'a> {
     pub data: &'a Vec<u8>,
     pub cursor: usize
@@ -16,11 +18,7 @@ impl DataReader<'_> {
             return Err("data size is longer than data reader remaining bytes")
         }
 
-        let mut data = vec![0; length];
-
-        for x in self.cursor..length + self.cursor {
-            data[x - self.cursor] = self.data[x];
-        }
+        let mut data = self.data[self.cursor..self.cursor + length].to_vec();
 
         self.cursor += length;
         Ok(data)
@@ -70,8 +68,8 @@ impl DataReader<'_> {
             result += ((read & 0b01111111) as u128) << (7 * num_read);
 
             num_read += 1;
-            if num_read > 5 {
-                return Err("VarInt is too big")
+            if num_read > 10 {
+                return Err("VarLong is too big")
             }
             if (read & 0b10000000) == 0 {
                 return Ok(result)
@@ -90,47 +88,39 @@ impl DataReader<'_> {
     }
 
     pub fn read_u16<'a>(&mut self) -> Result<u16, &'a str> {
-        if !self.check_lenght(2) {
-            return Err("data size is longer than datareader remaining bytes")
-        }
-
-        let u16 = ((self.data[self.cursor] as u16) << 8) + (self.data[self.cursor + 1] as u16);
+        let n = u16::from_be_bytes(match self.data[self.cursor..self.cursor + 2].try_into() {
+            Ok(t) => t,
+            Err(_e) => return Err("data size is longer than datareader remaining bytes")
+        });
 
         self.cursor += 2;
-        return Ok(u16);
+        return Ok(n);
     }
 
     pub fn read_i64<'a>(&mut self) -> Result<i64, &'a str> {
-        if !self.check_lenght(8) {
-            return Err("data size is longer than datareader remaining bytes")
-        }
-
-        let mut result: i64 = 0;
-
-        for x in 0..8 {
-            result += self.data[self.cursor + x] as i64;
-            if x != 7 {
-                result <<= 8;
-            }
-        }
+        let n = i64::from_be_bytes(match self.data[self.cursor..self.cursor + 8].try_into() {
+            Ok(t) => t,
+            Err(_e) => return Err("data size is longer than datareader remaining bytes")
+        });
 
         self.cursor += 8;
-        return Ok(result);
+        return Ok(n);
     }
 
     pub fn read_string<'a>(&mut self) -> Result<String, &'a str> {
-        if !self.check_lenght(2) {
+        let string_length = self.read_varint()? as usize;
+
+        if string_length == 0 {
+            return Ok(String::new());
+        }
+
+        if !self.check_lenght(string_length) {
             return Err("data size is longer than datareader remaining bytes")
         }
 
-        let string_lenght = self.data[self.cursor] as usize;
-        if string_lenght == 0 {
-            return Ok(String::new())
-        }
+        let vec = self.data[self.cursor..string_length + self.cursor].to_vec();
 
-        let vec = self.data[self.cursor + 1..string_lenght + self.cursor + 1].to_vec();
-
-        self.cursor += string_lenght + 1;
+        self.cursor += string_length;
 
         return match String::from_utf8(vec) {
             Ok(t) => Ok(t),
@@ -138,6 +128,7 @@ impl DataReader<'_> {
         }
     }
 
+    #[inline]
     fn check_lenght(&self, lenght: usize) -> bool {
         if lenght + self.cursor > self.data.len() {
             return false;

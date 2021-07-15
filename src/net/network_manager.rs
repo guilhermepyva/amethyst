@@ -265,6 +265,7 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
             },
             Err(e) => {
                 println!("An error occurred while reading stream of player {}, error: {}", player.nickname, e.to_string());
+                player.connection.disconnect(ChatComponent::new_text("An error occurred while reading stream".to_owned()));
                 continue;
             }
         };
