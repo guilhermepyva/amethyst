@@ -13,7 +13,7 @@ pub fn start(players: PlayerList) -> JoinHandle<()> {
     std::thread::Builder::new().name("Amethyst - Server Thread".to_owned()).spawn(move || {
         let packet_listeners = [
             PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
-            PacketListenerStruct {packet_id: 0x00, listener: game_chat::chat_listener},
+            PacketListenerStruct {packet_id: 0x01, listener: game_chat::chat_listener},
         ];
         let mut keep_alive_ticks = 0u8;
 
