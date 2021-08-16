@@ -4,16 +4,16 @@ use std::thread::JoinHandle;
 use crate::game::player::{PlayerList, Player};
 use std::sync::MutexGuard;
 use crate::net::packet_listener::PacketListenerStruct;
-use crate::net::network_manager::KeepAliveListener;
-use crate::game::game_chat::ChatListener;
+use crate::game::game_chat;
+use crate::game::packets::Packet;
 
 pub fn start(players: PlayerList) -> JoinHandle<()> {
     //Ticks
     let duration = Duration::from_millis(50);
     std::thread::Builder::new().name("Amethyst - Server Thread".to_owned()).spawn(move || {
-        let packet_listeners = vec![
-            PacketListenerStruct {packet_id: 0x00, listener: Box::new(KeepAliveListener {})},
-            PacketListenerStruct {packet_id: 0x01, listener: Box::new(ChatListener {})}
+        let packet_listeners = [
+            PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
+            PacketListenerStruct {packet_id: 0x00, listener: game_chat::chat_listener},
         ];
         let mut keep_alive_ticks = 0u8;
 

@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use game::player::PlayerList;
 
-use crate::net::network_manager::KeepAliveListener;
 use crate::net::packet_listener::PacketListenerStruct;
 use crate::game::position::Position;
 use std::mem::{size_of_val, size_of};

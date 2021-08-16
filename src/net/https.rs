@@ -1,4 +1,4 @@
-use openssl::ssl::{SslConnector, SslMethod};
+use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
 use std::net::TcpStream;
 use std::io::{Write, Read};
 
@@ -6,13 +6,18 @@ pub struct HttpsConnection {
 
 }
 
+#[test]
 pub fn test() {
-    let connector = SslConnector::builder(SslMethod::tls_client()).unwrap().build();
+    let mut connector = SslConnector::builder(SslMethod::tls_client()).unwrap();
+    connector.set_verify(SslVerifyMode::NONE);
+    let connector = connector.build();
 
     let mut stream = connector.connect(
         "sessionserver.mojang.com",
         TcpStream::connect("sessionserver.mojang.com:443").unwrap()
     ).unwrap();
+
+    println!("{:?}", stream);
 
     let get = b"GET /session/minecraft/profile/0ecda3389eeb413e962958bd0d552e5e HTTP/1.0\
     \nHost: sessionserver.mojang.com\

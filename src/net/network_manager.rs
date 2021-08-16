@@ -18,7 +18,7 @@ use login_handler::HandleResult;
 use openssl::rsa::Rsa;
 use std::process::exit;
 use std::time::Duration;
-use crate::net::packet_listener::{PacketListenerStruct, PacketListener};
+use crate::net::packet_listener::PacketListenerStruct;
 use crate::game::player_join::handle_join;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -216,7 +216,7 @@ pub fn start(players: PlayerList) {
 
 const BUFFER: [u8; 1024] = [0; 1024];
 
-pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListenerStruct>, keep_alive_ticks: &mut u8) {
+pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &[PacketListenerStruct], keep_alive_ticks: &mut u8) {
     //Keep Alive
     let mut send_keep_alive = false;
     if *keep_alive_ticks < 20 {
@@ -311,17 +311,14 @@ pub fn tick(sync_env: &mut SyncEnvironment, packet_listeners: &Vec<PacketListene
         //TODO substituir por binary search
         for packet_listener in packet_listeners {
             if packet_listener.packet_id == packet.2 {
-                packet_listener.listener.listen(&packet.1, packet.0, sync_env);
+                (packet_listener.listener)(&packet.1, packet.0, sync_env);
             }
         }
     }
 }
 
-pub struct KeepAliveListener {}
-impl PacketListener for KeepAliveListener {
-    fn listen(&self, packet: &Packet, player_index: usize, environment: &mut SyncEnvironment) {
-        environment.players[player_index].connection.keep_alive = 0;
-    }
+pub fn keep_alive_listener(packet: &Packet, player_index: usize, environment: &mut SyncEnvironment) {
+    environment.players[player_index].connection.keep_alive = 0;
 }
 
 fn read_packets<'a>(reader: &mut DataReader) -> Result<Vec<RawPacket>, &'a str> {
