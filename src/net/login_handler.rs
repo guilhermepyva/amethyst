@@ -88,46 +88,46 @@ pub fn handle<'a>(packet: Packet, client: &mut LoggingInClient) -> HandleResult<
             sha1.update(&shared_secret);
             sha1.update(&rsa.public_key_to_der().unwrap());
 
-            let response = match reqwest::blocking::Client::new().get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
-                .send() {
-                Ok(ok) => ok,
-                Err(e) => {
-                    println!("Error while contacting sessionserver.mojang.com to login a player: {}, {}", client.nickname.as_ref().unwrap(), e);
-                    return HandleResult::Disconnect("Couldn't decrypt shared secret")
-                }
-            };
-            let response_code = response.status().as_u16();
-            if response_code == 204 {
-                return HandleResult::Disconnect("Client not authenticated.")
-            }
-            let json = match response.text() {
-                Ok(ok) => {
-                    match json::parse(&ok) {
-                        Ok(ok) => ok,
-                        Err(e) => {
-                            println!("Error while parsing login response to json: {}, {}", client.nickname.as_ref().unwrap(), e);
-                            return HandleResult::Disconnect("An error occured while contacting Mojang.")
-                        }
-                    }
-                },
-                Err(e) => {
-                    println!("Error while parsing login response to text: {}, {}", client.nickname.as_ref().unwrap(), e);
-                    return HandleResult::Disconnect("An error occured while contacting Mojang.")
-                }
-            };
-
-            let data = match parse_json(json) {
-                Some(t) => t,
-                None => {
-                    println!("Error while parsing login response data to text: {}", client.nickname.as_ref().unwrap());
-                    return HandleResult::Disconnect("An error occured while contacting Mojang.")
-                }
-            };
+            // let response = match reqwest::blocking::Client::new().get(&format!("https://sessionserver.mojang.com/session/minecraft/hasJoined?username={}&serverId={}", client.nickname.as_ref().unwrap(), hex_digest(sha1)))
+            //     .send() {
+            //     Ok(ok) => ok,
+            //     Err(e) => {
+            //         println!("Error while contacting sessionserver.mojang.com to login a player: {}, {}", client.nickname.as_ref().unwrap(), e);
+            //         return HandleResult::Disconnect("Couldn't decrypt shared secret")
+            //     }
+            // };
+            // let response_code = response.status().as_u16();
+            // if response_code == 204 {
+            //     return HandleResult::Disconnect("Client not authenticated.")
+            // }
+            // let json = match response.text() {
+            //     Ok(ok) => {
+            //         match json::parse(&ok) {
+            //             Ok(ok) => ok,
+            //             Err(e) => {
+            //                 println!("Error while parsing login response to json: {}, {}", client.nickname.as_ref().unwrap(), e);
+            //                 return HandleResult::Disconnect("An error occured while contacting Mojang.")
+            //             }
+            //         }
+            //     },
+            //     Err(e) => {
+            //         println!("Error while parsing login response to text: {}, {}", client.nickname.as_ref().unwrap(), e);
+            //         return HandleResult::Disconnect("An error occured while contacting Mojang.")
+            //     }
+            // };
+            //
+            // let data = match parse_json(json) {
+            //     Some(t) => t,
+            //     None => {
+            //         println!("Error while parsing login response data to text: {}", client.nickname.as_ref().unwrap());
+            //         return HandleResult::Disconnect("An error occured while contacting Mojang.")
+            //     }
+            // };
 
             //TODO Arrumar login
             HandleResult::SendPacket(Packet::LoginSuccess {
-                uuid: data.0,
-                nickname: data.1.to_string()
+                uuid: Uuid::default(),
+                nickname: "".to_string()
             })
         }
         _ => HandleResult::Nothing

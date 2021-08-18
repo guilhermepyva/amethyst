@@ -24,6 +24,17 @@ impl DataReader<'_> {
         Ok(data)
     }
 
+    pub fn read_data_fixed_no_clone<'a>(&mut self, length: usize) -> Result<&[u8], &'a str> {
+        if !self.check_lenght(length) {
+            return Err("data size is longer than data reader remaining bytes")
+        }
+
+        let mut data = &self.data[self.cursor..self.cursor + length];
+
+        self.cursor += length;
+        Ok(data)
+    }
+
     pub fn read_data(&mut self) -> Result<Vec<u8>, &str> {
         let length = match self.read_varint() {
             Ok(t) => t,
