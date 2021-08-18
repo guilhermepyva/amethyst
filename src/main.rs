@@ -13,7 +13,7 @@ mod game;
 
 fn main() {
     let players: PlayerList = Box::leak(Box::new(Mutex::new(Vec::new())));
-    net::network_manager::start(players);
+    net::newer_network_manager::start(players);
 
     // net::https::test();
     game::engine::start(players).join().expect("couldn't join thread in main thread");
