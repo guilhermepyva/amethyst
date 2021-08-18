@@ -44,4 +44,4 @@ impl PlayerConnection {
     }
 }
 
-pub type PlayerList = Arc<Mutex<Vec<Player>>>;
+pub type PlayerList = &'static Mutex<Vec<Player>>;
