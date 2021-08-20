@@ -1,5 +1,4 @@
 use crate::data_reader::DataReader;
-use crate::net::network_manager::ConnectionState;
 use crate::data_writer::DataWriter;
 use crate::game::chat::ChatComponent;
 use json::JsonValue;
@@ -7,6 +6,7 @@ use uuid::Uuid;
 use crate::game::position::Position;
 use crate::game::packets::Packet::InexistentPacket;
 use crate::game::nbt::NBTTag;
+use crate::net::newer_network_manager::ConnectionState;
 
 pub enum Packet {
     InexistentPacket,
@@ -28,15 +28,11 @@ pub enum Packet {
     LoginStart {nickname: String},
     EncryptionRequest {
         server: String,
-        public_key_length: i32,
         public_key: Vec<u8>,
-        verify_token_length: i32,
         verify_token: [u8; 4]
     },
     EncryptionResponse {
-        shared_secret_length: i32,
         shared_secret: Vec<u8>,
-        verify_token_length: i32,
         verify_token: Vec<u8>
     },
     LoginSuccess {
@@ -163,68 +159,65 @@ pub struct PlayerInfoProperties {
 }
 
 impl Packet {
-    pub fn read<'a>(id: i32, reader: &mut DataReader, state: ConnectionState) -> Result<Packet, &'a str> {
+    pub fn read<'a>(id: i32, reader: &mut DataReader, state: ConnectionState) -> Option<Packet> {
         match state {
             ConnectionState::Play => {
                 match id {
-                    0x00 => Ok(Packet::KeepAlive {id: reader.read_varint()?}),
-                    0x01 => Ok(Packet::ClientChatMessage {message: reader.read_string()?}),
-                    _ => Ok(InexistentPacket)
+                    0x00 => Some(Packet::KeepAlive {id: reader.read_varint()?}),
+                    0x01 => Some(Packet::ClientChatMessage {message: reader.read_string()?}),
+                    _ => None
                 }
             }
             ConnectionState::Login => {
                 match id {
-                    0x00 => Ok(Packet::LoginStart { nickname: reader.read_string()? }),
+                    0x00 => Some(Packet::LoginStart { nickname: reader.read_string()? }),
                     0x01 => {
                         let shared_secret_length = reader.read_varint()?;
                         let shared_secret = reader.read_data_fixed(shared_secret_length as usize)?;
                         let verify_token_length = reader.read_varint()?;
+                        let verify_token = reader.read_data_fixed(verify_token_length as usize)?;
 
-                        Ok(Packet::EncryptionResponse {
-                            shared_secret_length,
+                        Some(Packet::EncryptionResponse {
                             shared_secret,
-                            verify_token_length,
-                            verify_token: reader.read_data_fixed(verify_token_length as usize)?
+                            verify_token
                         })
                     }
-                    _ => Err("Inexistent packet ID")
+                    _ => None
                 }
             }
             ConnectionState::Handshaking => {
                 match id {
-                    0x00 => Ok(Packet::Handshake {
+                    0x00 => Some(Packet::Handshake {
                             protocol_version: reader.read_varint()?,
                             server_address: reader.read_string()?,
                             server_port: reader.read_u16()?,
                             next_state: reader.read_u8()?, }),
-                    _ => Err("You were supposed to send the handshake packet.")
+                    _ => None
                 }
             }
             ConnectionState::Status => {
                 match id {
-                    0x00 => Ok(Packet::StatusRequest),
-                    0x01 => Ok(Packet::Ping { ping: reader.read_i64()? }),
-                    _ => Err("Inexistent packet ID")
+                    0x00 => Some(Packet::StatusRequest),
+                    0x01 => Some(Packet::Ping { ping: reader.read_i64()? }),
+                    _ => None
                 }
             }
         }
     }
 
-    pub fn serialize<'a>(&self) -> Result<Vec<u8>, &'a str> {
+    pub fn serialize<'a>(&self) -> Option<Vec<u8>> {
         let mut writer = DataWriter::new();
         match self {
             Packet::EncryptionRequest {
                 public_key,
-                public_key_length,
                 server,
                 verify_token,
-                verify_token_length
             } => {
                 writer.write_u8(0x01);
                 writer.write_string(server);
-                writer.write_varint(*public_key_length);
+                writer.write_varint(public_key.len() as i32);
                 writer.write_vec_data(public_key);
-                writer.write_varint(*verify_token_length);
+                writer.write_varint(verify_token.len() as i32);
                 writer.write_data(verify_token);
             }
             Packet::DisconnectLogin {reason} => {
@@ -437,9 +430,9 @@ impl Packet {
                 writer.write_string(&component.to_string());
                 writer.write_u8(*pos);
             }
-            _ => return Err("Can't serialize this packet")
+            _ => return None
         }
 
-        Ok(writer.data)
+        Some(writer.data)
     }
 }

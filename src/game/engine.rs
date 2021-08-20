@@ -12,8 +12,8 @@ pub fn start(players: PlayerList) -> JoinHandle<()> {
     let duration = Duration::from_millis(50);
     std::thread::Builder::new().name("Amethyst - Server Thread".to_owned()).spawn(move || {
         let packet_listeners = [
-            PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
-            PacketListenerStruct {packet_id: 0x01, listener: game_chat::chat_listener},
+            // PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
+            PacketListenerStruct {packet_id: 0x01, listener: game_chat::chat_listener}
         ];
         let mut keep_alive_ticks = 0u8;
 
@@ -21,7 +21,7 @@ pub fn start(players: PlayerList) -> JoinHandle<()> {
             let mut sync_environment =  SyncEnvironment {
                 players: players.lock().unwrap()
             };
-            network_manager::tick(&mut sync_environment, &packet_listeners, &mut keep_alive_ticks);
+            // network_manager::tick(&mut sync_environment, &packet_listeners, &mut keep_alive_ticks);
 
             drop(sync_environment);
             //You need to drop everything before this sleep
