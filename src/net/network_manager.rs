@@ -14,7 +14,6 @@ use aes::cipher::{StreamCipher, NewStreamCipher};
 use crate::game::packets::Packet;
 use crate::game::player::{Player, PlayerConnection, PlayerList};
 use crate::game::engine::SyncEnvironment;
-use login_handler::HandleResult;
 use openssl::rsa::Rsa;
 use std::process::exit;
 use std::time::Duration;

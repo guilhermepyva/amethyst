@@ -13,6 +13,8 @@ use uuid::Uuid;
 use std::collections::HashMap;
 use crate::game::packets::Packet;
 use crate::data_writer::DataWriter;
+use openssl::rsa::Rsa;
+use aes::cipher::StreamCipher;
 
 //Server address
 const ADDR: &str = "127.0.0.1:25565";
@@ -36,19 +38,31 @@ pub struct PlayerLoginClient {
     pub verify_token: Option<[u8; 4]>,
     pub encode: Option<Cfb8<Aes128>>,
     pub decode: Option<Cfb8<Aes128>>,
-    pub profile_uuid: Option<Uuid>
+    pub uuid: Option<Uuid>
 }
 
 impl PlayerLoginClient {
     pub fn write(&mut self, packet: Packet) {
+        //Serialize
         let mut data = match packet.serialize() {Some(t) => t, None => return};
+        //Add length prefix
         data.splice(0..0, DataWriter::get_varint(data.len() as u32));
+        //Encrypt
+        match &mut self.encode {
+            Some(encode) => encode.encrypt(&mut data),
+            None => {}
+        }
+        //Write
         self.connection.stream.write(&data);
     }
 }
 
 pub struct PlayerClient {
-    connection: Connection
+    connection: Connection,
+    nickname: Option<String>,
+    encode: Cfb8<Aes128>,
+    decode: Cfb8<Aes128>,
+    uuid: Uuid
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -79,6 +93,11 @@ pub fn start(players: PlayerList) {
 
     std::thread::Builder::new().name("IO Network Thread".to_string()).spawn(move || {
         let mut buffer = [0u8; BUFFER_SIZE];
+        unsafe {
+            let rsa = Rsa::generate(1024).expect("Couldn't generate RSA server key");
+            login_handler::PUBLIC_KEY = Some(rsa.public_key_to_der().expect("Couldn't generate RSA server public key"));
+            login_handler::RSA = Some(rsa);
+        }
 
         loop {
             //Poll events
@@ -111,7 +130,7 @@ pub fn start(players: PlayerList) {
                                     verify_token: None,
                                     encode: None,
                                     decode: None,
-                                    profile_uuid: None
+                                    uuid: None
                                 };
 
                                 //Register client in poll and clients vector
@@ -131,7 +150,6 @@ pub fn start(players: PlayerList) {
                     }
                 } else {
                     //Check for clients token
-                    println!("{}", login_clients.len());
                     let mut login_client = login_clients.get_mut(&token);
                     let mut play_client = if login_client.is_none() {play_clients.get_mut(&token)} else {None};
 

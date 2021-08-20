@@ -4,7 +4,7 @@ use json::number::Number;
 use crate::game::chat::ChatComponent;
 use openssl::rsa::{Rsa, Padding};
 use openssl::pkey::Private;
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use cfb8::Cfb8;
 use aes::Aes128;
 use uuid::Uuid;
@@ -16,18 +16,11 @@ use std::str::FromStr;
 use crate::net::newer_network_manager::{RawPacket, PlayerLoginClient, ConnectionState};
 use crate::data_reader::DataReader;
 
-pub enum HandleResult<'a> {
-    SendPacket(Packet),
-    Disconnect(&'a str),
-    Nothing
-}
-
 pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) {
     for raw in packets {
         let packet = match Packet::read(raw.id, &mut DataReader::new(raw.data), client.state) {Some(t) => t, None => continue};
         match packet {
             Packet::Handshake {next_state, protocol_version, server_address, server_port} => {
-                println!("{} {} {} {}", next_state, protocol_version, server_address, server_port);
                 match next_state {
                     1 => client.state = ConnectionState::Status,
                     2 => client.state = ConnectionState::Login,
@@ -37,7 +30,6 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) {
                 }
             }
             Packet::StatusRequest => {
-                println!("request");
                 let mut json = JsonValue::new_object();
                 let mut version = JsonValue::new_object();
                 version["name"] = JsonValue::String("1.8.9".to_owned());
@@ -50,16 +42,49 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) {
                 json["description"] = ChatComponent::new_text("Amethyst Minecraft Server".to_owned()).to_json();
                 client.write(Packet::StatusResponse {json});
             }
-            Packet::Ping {ping} => {
-                println!("{}", ping);
-                client.write(Packet::Pong {pong: ping})
-            },
+            Packet::Ping {ping} => client.write(Packet::Pong {pong: ping}),
             Packet::LoginStart {nickname} => {
-                println!("login {}", nickname);
-                client.write(Packet::EncryptionRequest {server: String::new(), public_key: Rsa::generate(1024).unwrap().public_key_to_der().unwrap(), verify_token: [1, 2, 3, 4]})
+                client.verify_token = Some(thread_rng().gen::<[u8; 4]>());
+                client.write(Packet::EncryptionRequest {server: String::new(), public_key: get_publick_key().clone(), verify_token: client.verify_token.unwrap().clone()});
+                client.connection.identifier = nickname.clone();
+                client.nickname = Some(nickname)
             }
             Packet::EncryptionResponse {verify_token, shared_secret} => {
-                println!("response");
+                let rsa = get_rsa();
+                let mut decrypted_verify_token = [0 as u8; 128];
+                match rsa.private_decrypt(&verify_token, &mut decrypted_verify_token, Padding::PKCS1) {
+                    Ok(_t) => {},
+                    Err(_e) => {
+                        //TODO DC for invalid verify token
+                    }
+                };
+
+                if !decrypted_verify_token[0..4].eq(&client.verify_token.unwrap()) {
+                    //TODO DC for wrong verify token
+                }
+
+                let mut decrypted_shared_secret = [0 as u8; 128];
+                let shared_secret_length = match rsa.private_decrypt(&shared_secret, &mut decrypted_shared_secret, Padding::PKCS1) {
+                    Ok(t) => t,
+                    Err(_e) => {
+                        //TODO DC for invalid shared secret
+                        continue;
+                    }
+                };
+                let shared_secret = &decrypted_shared_secret[0..shared_secret_length];
+
+                client.encode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
+                client.decode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
+
+                let mut sha1 = Sha1::new();
+                sha1.update(b"");
+                sha1.update(&shared_secret);
+                sha1.update(&rsa.public_key_to_der().unwrap());
+
+                client.write(Packet::LoginSuccess {
+                    uuid: Uuid::default(),
+                    nickname: "britney bitch".to_string()
+                });
             }
             _ => {
                 //TODO DC for unknown login packet
@@ -200,9 +225,19 @@ fn parse_json(mut json: JsonValue) -> Option<(Uuid, String)> {
 }
 
 pub static mut RSA: Option<Rsa<Private>> = None;
+pub static mut PUBLIC_KEY: Option<Vec<u8>> = None;
+
+#[inline]
 fn get_rsa() -> &'static Rsa<Private> {
     unsafe {
         return RSA.as_ref().unwrap();
+    }
+}
+
+#[inline]
+fn get_publick_key() -> &'static Vec<u8> {
+    unsafe {
+        return PUBLIC_KEY.as_ref().unwrap();
     }
 }
 
