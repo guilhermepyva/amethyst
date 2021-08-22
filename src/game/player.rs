@@ -8,40 +8,12 @@ use crate::game::packets::Packet;
 use aes::cipher::StreamCipher;
 use crate::data_writer::DataWriter;
 use std::io::Write;
+use mio::Token;
 
 pub struct Player {
-    pub connection: PlayerConnection,
+    pub token: Token,
     pub uuid: Uuid,
-    pub nickname: String,
-    pub join_game: bool
-}
-
-pub struct PlayerConnection {
-    pub addr: SocketAddr,
-    pub stream: TcpStream,
-    pub encoding: Cfb8<Aes128>,
-    pub decoding: Cfb8<Aes128>,
-    pub shutdown: bool,
-    pub disconnect: Option<ChatComponent>,
-    pub keep_alive: u16
-}
-
-impl PlayerConnection {
-    pub fn disconnect(&mut self, reason: ChatComponent) {
-        self.disconnect = Some(reason);
-        self.shutdown = true;
-    }
-
-    pub fn shutdown(&mut self) {
-        self.shutdown = true;
-    }
-
-    pub fn send_packet(&mut self, packet: &Packet) {
-        let mut packet_binary = packet.serialize().unwrap();
-        packet_binary.splice(0..0, DataWriter::get_varint(packet_binary.len() as u32));
-        self.encoding.encrypt(&mut packet_binary);
-        self.stream.write(&packet_binary);
-    }
+    pub nickname: String
 }
 
 pub type PlayerList = &'static Mutex<Vec<Player>>;

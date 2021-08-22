@@ -12,7 +12,7 @@ use aes::Aes128;
 use crate::data_writer::DataWriter;
 use aes::cipher::{StreamCipher, NewStreamCipher};
 use crate::game::packets::Packet;
-use crate::game::player::{Player, PlayerConnection, PlayerList};
+use crate::game::player::{Player, PlayerList};
 use crate::game::engine::SyncEnvironment;
 use openssl::rsa::Rsa;
 use std::process::exit;

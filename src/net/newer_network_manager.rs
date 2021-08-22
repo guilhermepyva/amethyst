@@ -1,8 +1,7 @@
-use crate::game::player::{PlayerList, PlayerConnection};
 use crate::net::login_handler;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Poll, Token, Interest};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::net::{SocketAddr, Shutdown};
 use mio::event::Source;
 use std::io::{Read, ErrorKind, Write};
@@ -15,6 +14,10 @@ use crate::game::packets::Packet;
 use crate::data_writer::DataWriter;
 use openssl::rsa::Rsa;
 use aes::cipher::StreamCipher;
+use crate::net::login_handler::HandleResult;
+use crate::game::chat::ChatComponent;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 
 //Server address
 const ADDR: &str = "127.0.0.1:25565";
@@ -44,9 +47,7 @@ pub struct PlayerLoginClient {
 impl PlayerLoginClient {
     pub fn write(&mut self, packet: Packet) {
         //Serialize
-        let mut data = match packet.serialize() {Some(t) => t, None => return};
-        //Add length prefix
-        data.splice(0..0, DataWriter::get_varint(data.len() as u32));
+        let mut data = match packet.serialize_length() {Some(t) => t, None => return};
         //Encrypt
         match &mut self.encode {
             Some(encode) => encode.encrypt(&mut data),
@@ -55,14 +56,70 @@ impl PlayerLoginClient {
         //Write
         self.connection.stream.write(&data);
     }
+
+    pub fn write_dc(&mut self, reason: String) {
+        //Serialize
+        let packet = Packet::DisconnectLogin {reason: ChatComponent::new_text(reason)};
+        let mut serialized = match packet.serialize_length() {Some(t) => t, None => return};
+        //Write
+        self.connection.stream.write(&serialized);
+        println!("{:?}", serialized);
+    }
+
+    pub fn shutdown(&mut self, reason: String, poll: &Poll) {
+        self.write_dc(reason);
+        self.connection.stream.flush();
+        poll.registry().deregister(&mut self.connection.stream);
+        self.connection.stream.shutdown(Shutdown::Both);
+    }
 }
 
 pub struct PlayerClient {
     connection: Connection,
-    nickname: Option<String>,
     encode: Cfb8<Aes128>,
     decode: Cfb8<Aes128>,
-    uuid: Uuid
+}
+
+impl PlayerClient {
+    pub fn write(&mut self, packet: Packet) {
+        //Serialize
+        let mut data = match packet.serialize_length() {Some(t) => t, None => return};
+        //Encrypt
+        self.encode.encrypt(&mut data);
+        //Write
+        self.connection.stream.write(&data);
+    }
+
+    pub fn write_data_no_length(&mut self, data: &Vec<u8>) {
+        //Serialize
+        let mut data = data.clone();
+        //Encrypt
+        self.encode.encrypt(&mut data);
+        //Write
+        self.connection.stream.write(&data);
+    }
+
+    pub fn write_data(&mut self, data: &Vec<u8>) {
+        //Serialize
+        let mut data = data.clone();
+        //Add length prefix
+        data.splice(0..0, DataWriter::get_varint(data.len() as u32));
+        //Encrypt
+        self.encode.encrypt(&mut data);
+        //Write
+        self.connection.stream.write(&data);
+    }
+
+    pub fn shutdown(&mut self, reason: String, poll: &Poll) {
+        self.write(Packet::DisconnectPlay {reason: ChatComponent::new_text(reason)});
+        self.shutdown_connection(poll);
+    }
+
+    pub fn shutdown_connection(&mut self, poll: &Poll) {
+        self.connection.stream.flush();
+        poll.registry().deregister(&mut self.connection.stream);
+        self.connection.stream.shutdown(Shutdown::Both);
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -73,7 +130,7 @@ pub enum ConnectionState {
     Play
 }
 
-pub fn start(players: PlayerList) {
+pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>) {
     //Open server
     let mut server = TcpListener::bind(ADDR.parse().unwrap()).expect("An error occured while binding the server");
 
@@ -101,9 +158,7 @@ pub fn start(players: PlayerList) {
 
         loop {
             //Poll events
-            poll.poll(&mut events, None);
-
-            if events.is_empty() {continue;}
+            poll.poll(&mut events, Some(Duration::from_millis(1)));
 
             for event in events.iter() {
                 let token = event.token();
@@ -115,14 +170,6 @@ pub fn start(players: PlayerList) {
                         match server.accept() {
                             //Got a client
                             Ok(mut client) => {
-                                //Check if client is already logging
-                                if login_clients.values().into_iter().any(|x: &PlayerLoginClient| client.1.ip().eq(&x.connection.addr.ip())) {
-                                    //TODO Disconnect client
-                                    println!("ih");
-                                    client.0.shutdown(Shutdown::Both);
-                                    continue;
-                                }
-
                                 let mut login_client = PlayerLoginClient {
                                     connection: Connection { token: Token(token_counter), stream: client.0, addr: client.1, identifier: client.1.ip().to_string() },
                                     state: ConnectionState::Handshaking,
@@ -132,6 +179,12 @@ pub fn start(players: PlayerList) {
                                     decode: None,
                                     uuid: None
                                 };
+
+                                //Check if client is already logging
+                                if login_clients.values().into_iter().any(|x: &PlayerLoginClient| login_client.connection.addr.ip().eq(&x.connection.addr.ip())) {
+                                    login_client.shutdown("One client logging in per time!".to_string(), &poll);
+                                    continue;
+                                }
 
                                 //Register client in poll and clients vector
                                 poll.registry().register(&mut login_client.connection.stream, login_client.connection.token, Interest::READABLE);
@@ -211,26 +264,159 @@ pub fn start(players: PlayerList) {
                     }
 
                     if disconnect {
-                        //TODO Disconnect
-                        poll.registry().deregister(&mut connection.stream);
-                        if play_client.is_some() {play_clients.remove(&token);}
-                        else {login_clients.remove(&token);}
-                        break;
+                        if play_client.is_some() {
+                            play_client.unwrap().shutdown("IO Error".to_string(), &poll);
+                            net_writer.send(GameProtocol::ForcedDisconnect {token});
+                            play_clients.remove(&token);
+                        }
+                        else {
+                            login_client.unwrap().shutdown("IO Error".to_string(), &poll);
+                            login_clients.remove(&token);
+                        }
+                        continue;
                     }
 
+                    //Read packets length, id and separe them
                     let raw_packets = match read_packets(&vec) {
                         Some(t) => t,
                         None => { println!("Error while decoding client {} packets", connection.identifier); continue; }
                     };
 
+                    //Handle the login
                     match login_client {
-                        Some(client) => login_handler::handle(raw_packets, client),
+                        Some(client) => {
+                            let result = login_handler::handle(raw_packets, client);
+                            match result {
+                                HandleResult::Disconnect(reason) => {
+                                    client.shutdown(reason.to_string(), &poll);
+                                    login_clients.remove(&token);
+                                    break;
+                                }
+                                HandleResult::Login => {
+                                    //Player is ready to go to Play connection state
+                                    let client = login_clients.remove(&token).unwrap();
+
+                                    let play_client = PlayerClient {
+                                        connection: client.connection,
+                                        encode: client.encode.unwrap(),
+                                        decode: client.decode.unwrap(),
+                                    };
+
+                                    play_clients.insert(play_client.connection.token, play_client);
+                                    net_writer.send(GameProtocol::Login {token, uuid: client.uuid.unwrap(), nickname: client.nickname.unwrap()});
+                                }
+                                HandleResult::None => {}
+                            }
+                            continue;
+                        },
                         _ => {}
+                    }
+
+                    //Read packets
+                    match play_client {
+                        Some(t) => {
+                            for raw_packet in raw_packets {
+                                let packet = Packet::read(raw_packet.id, &mut DataReader::new(raw_packet.data), ConnectionState::Play);
+                                match packet {
+                                    Some(t) => {
+                                        //Send packets to be processed by the tick thread
+                                        net_writer.send(GameProtocol::Packet {token, packet: t});
+                                    }
+                                    None => {}
+                                }
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+            
+            //Starts to read the game messages
+            for message in net_reader.try_iter() {
+                match message {
+                    NetProtocol::SendPacket {token, packet} => {
+                        let client = match play_clients.get_mut(&token) {Some(t) => t, None => continue};
+                        client.write(packet);
+                    }
+                    NetProtocol::SendData {token, packet} => {
+                        let client = match play_clients.get_mut(&token) {Some(t) => t, None => continue};
+                        client.write_data(&packet);
+                    }
+                    NetProtocol::SendDataNoLength {token, packet} => {
+                        let client = match play_clients.get_mut(&token) {Some(t) => t, None => continue};
+                        client.write_data(&packet);
+                    }
+                    NetProtocol::Unregister {token} => {
+                        let client = match play_clients.get_mut(&token) {Some(t) => t, None => continue};
+                        client.shutdown_connection(&poll);
+                        play_clients.remove(&token);
                     }
                 }
             }
         }
     });
+}
+
+pub enum NetProtocol {
+    SendPacket {
+        token: Token,
+        packet: Packet
+    },
+    SendData {
+        token: Token,
+        packet: Arc<Vec<u8>>
+    },
+    SendDataNoLength {
+        token: Token,
+        packet: Arc<Vec<u8>>
+    },
+    Unregister {
+        token: Token
+    }
+}
+
+pub enum GameProtocol {
+    Login {
+        token: Token,
+        nickname: String,
+        uuid: Uuid
+    },
+    ForcedDisconnect {
+        token: Token
+    },
+    Packet {
+        token: Token,
+        packet: Packet
+    }
+}
+
+pub struct NetWriter {
+    pub writer: Sender<NetProtocol>
+}
+
+impl NetWriter {
+    pub fn send_packet(&self, token: Token, packet: Packet) {
+        self.writer.send(NetProtocol::SendPacket {token, packet});
+    }
+
+    pub fn send_data(self, token: Token, data: Arc<Vec<u8>>) {
+        self.writer.send(NetProtocol::SendData {token, packet: data});
+    }
+
+    pub fn send_data_nolength(&self, token: Token, data: Arc<Vec<u8>>) {
+        self.writer.send(NetProtocol::SendDataNoLength {token, packet: data});
+    }
+
+    pub fn disconnect(&self, token: Token, reason: ChatComponent) {
+        self.writer.send(NetProtocol::SendPacket {token, packet: Packet::DisconnectPlay {reason}});
+        self.writer.send(NetProtocol::Unregister {token});
+    }
+}
+
+impl Clone for NetWriter {
+    fn clone(&self) -> Self {
+        NetWriter {writer: self.writer.clone()}
+    }
 }
 
 pub struct RawPacket<'a> {

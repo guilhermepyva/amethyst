@@ -26,96 +26,96 @@ use std::mem::size_of_val;
  */
 
 pub fn handle_join(player: &mut Player) {
-    println!("Player {} joined the server", player.nickname);
-    player.connection.send_packet(&Packet::KeepAlive {id: 0});
-    player.connection.send_packet(&Packet::JoinGame {
-        entity_id: 0,
-        gamemode: 1,
-        dimension: 0,
-        difficulty: 0,
-        max_players: 255,
-        level_type: "teste".to_string(),
-        reduced_debug_info: false
-    });
-    player.connection.send_packet(&Packet::SpawnPosition {location: Position {
-        x: 0,
-        y: 50,
-        z: 0
-    }});
-    player.connection.send_packet(&Packet::HeldItemChange {slot: 0});
-    player.connection.send_packet(&Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
-        uuid: player.uuid.clone(),
-        action: PlayerInfoAction::AddPlayer {
-            name: player.nickname.clone(),
-            properties: vec!(),
-            gamemode: 0,
-            ping: 0,
-            display_name: Option::from(ChatComponent::new_text(player.nickname.clone()))
-        }
-    })});
-    player.connection.send_packet(&Packet::PlayerPositionAndLook {
-        x: 0.0,
-        y: 50.0,
-        z: 0.0,
-        yaw: 0.0,
-        pitch: 0.0,
-        flags: 0
-    });
-    player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
-    player.connection.send_packet(&Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
-
-    let bitmask = 0b0000000000001000 as u16;
-    let mut writer = DataWriter::new();
-    let mut blocks = [[[0u16; 16]; 16]; 16];
-    let stone = (1 << 4) | 0;
-    let torch = (50 << 4) | 5;
-    let dirt = (3 << 4) | 0;
-
-    for z in 0..16 {
-        for x in 0..16 {
-            blocks[0][z][x] = stone;
-        }
-    }
-    blocks[1][8][8] = torch;
-    blocks[1][8][7] = stone;
-
-    let mut matrix = [[0i8; 16]; 16];
-    let light_torch = PosValue::new(8, 8, 13);
-    PosValue::new(7, 8, -1).set(&mut matrix);
-    light_torch.set(&mut matrix);
-
-    ray_casting(&mut matrix, &light_torch);
-
-    let mut lightning = [[[5u8; 16]; 16]; 16];
-
-    for z in 0..16 {
-        for x in 0..16 {
-            if matrix[x][z] < 0 {
-                continue;
-            }
-            lightning[1][z][x] = matrix[x][z] as u8;
-        }
-    }
-
-    let mut block_light = [0u8; 2048];
-    let mut i = 0;
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in (0..16).step_by(2) {
-                block_light[i] = ((lightning[y][z][x + 1] << 4) + lightning[y][z][x]);
-                i += 1;
-            }
-        }
-    }
-    let mut skylight = [0u8; 2048];
-
-    player.connection.send_packet(&Packet::ChunkData {
-        bitmask,
-        ground_up_continuous: true,
-        x: 0,
-        y: 0,
-        data: write_chunk_light(&blocks, &block_light, &skylight)
-    });
+    // println!("Player {} joined the server", player.nickname);
+    // player.connection.send_packet(&Packet::KeepAlive {id: 0});
+    // player.connection.send_packet(&Packet::JoinGame {
+    //     entity_id: 0,
+    //     gamemode: 1,
+    //     dimension: 0,
+    //     difficulty: 0,
+    //     max_players: 255,
+    //     level_type: "teste".to_string(),
+    //     reduced_debug_info: false
+    // });
+    // player.connection.send_packet(&Packet::SpawnPosition {location: Position {
+    //     x: 0,
+    //     y: 50,
+    //     z: 0
+    // }});
+    // player.connection.send_packet(&Packet::HeldItemChange {slot: 0});
+    // player.connection.send_packet(&Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
+    //     uuid: player.uuid.clone(),
+    //     action: PlayerInfoAction::AddPlayer {
+    //         name: player.nickname.clone(),
+    //         properties: vec!(),
+    //         gamemode: 0,
+    //         ping: 0,
+    //         display_name: Option::from(ChatComponent::new_text(player.nickname.clone()))
+    //     }
+    // })});
+    // player.connection.send_packet(&Packet::PlayerPositionAndLook {
+    //     x: 0.0,
+    //     y: 50.0,
+    //     z: 0.0,
+    //     yaw: 0.0,
+    //     pitch: 0.0,
+    //     flags: 0
+    // });
+    // player.connection.send_packet(&Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
+    // player.connection.send_packet(&Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
+    //
+    // let bitmask = 0b0000000000001000 as u16;
+    // let mut writer = DataWriter::new();
+    // let mut blocks = [[[0u16; 16]; 16]; 16];
+    // let stone = (1 << 4) | 0;
+    // let torch = (50 << 4) | 5;
+    // let dirt = (3 << 4) | 0;
+    //
+    // for z in 0..16 {
+    //     for x in 0..16 {
+    //         blocks[0][z][x] = stone;
+    //     }
+    // }
+    // blocks[1][8][8] = torch;
+    // blocks[1][8][7] = stone;
+    //
+    // let mut matrix = [[0i8; 16]; 16];
+    // let light_torch = PosValue::new(8, 8, 13);
+    // PosValue::new(7, 8, -1).set(&mut matrix);
+    // light_torch.set(&mut matrix);
+    //
+    // ray_casting(&mut matrix, &light_torch);
+    //
+    // let mut lightning = [[[5u8; 16]; 16]; 16];
+    //
+    // for z in 0..16 {
+    //     for x in 0..16 {
+    //         if matrix[x][z] < 0 {
+    //             continue;
+    //         }
+    //         lightning[1][z][x] = matrix[x][z] as u8;
+    //     }
+    // }
+    //
+    // let mut block_light = [0u8; 2048];
+    // let mut i = 0;
+    // for y in 0..16 {
+    //     for z in 0..16 {
+    //         for x in (0..16).step_by(2) {
+    //             block_light[i] = ((lightning[y][z][x + 1] << 4) + lightning[y][z][x]);
+    //             i += 1;
+    //         }
+    //     }
+    // }
+    // let mut skylight = [0u8; 2048];
+    //
+    // player.connection.send_packet(&Packet::ChunkData {
+    //     bitmask,
+    //     ground_up_continuous: true,
+    //     x: 0,
+    //     y: 0,
+    //     data: write_chunk_light(&blocks, &block_light, &skylight)
+    // });
 
     //
     // let mut id = 256;

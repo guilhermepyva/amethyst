@@ -435,4 +435,10 @@ impl Packet {
 
         Some(writer.data)
     }
+
+    pub fn serialize_length(&self) -> Option<Vec<u8>> {
+        let mut data = self.serialize()?;
+        data.splice(0..0, DataWriter::get_varint(data.len() as u32));
+        Some(data)
+    }
 }
