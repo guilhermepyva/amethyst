@@ -63,11 +63,12 @@ impl PlayerLoginClient {
         let mut serialized = match packet.serialize_length() {Some(t) => t, None => return};
         //Write
         self.connection.stream.write(&serialized);
-        println!("{:?}", serialized);
     }
 
     pub fn shutdown(&mut self, reason: String, poll: &Poll) {
-        self.write_dc(reason);
+        if let ConnectionState::Status = self.state {
+            self.write_dc(reason);
+        }
         self.connection.stream.flush();
         poll.registry().deregister(&mut self.connection.stream);
         self.connection.stream.shutdown(Shutdown::Both);
@@ -264,22 +265,26 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                     }
 
                     if disconnect {
-                        if play_client.is_some() {
-                            play_client.unwrap().shutdown("IO Error".to_string(), &poll);
+                        if let Some(client) = play_client {
+                            client.shutdown("IO Error".to_string(), &poll);
                             net_writer.send(GameProtocol::ForcedDisconnect {token});
                             play_clients.remove(&token);
-                        }
-                        else {
+                        } else {
                             login_client.unwrap().shutdown("IO Error".to_string(), &poll);
                             login_clients.remove(&token);
                         }
                         continue;
                     }
 
+                    //If it is play client, then decrypt the data first
+                    if let Some(ref mut client) = play_client {
+                        client.decode.decrypt(&mut vec);
+                    }
+
                     //Read packets length, id and separe them
                     let raw_packets = match read_packets(&vec) {
                         Some(t) => t,
-                        None => { println!("Error while decoding client {} packets", connection.identifier); continue; }
+                        None => { continue; }
                     };
 
                     //Handle the login
@@ -471,4 +476,13 @@ fn read_packets(data: &Vec<u8>) -> Option<Vec<RawPacket>> {
     }
 
     Some(raw_packets)
+}
+
+#[test]
+pub fn test() {
+    let vec = vec![35, 244, 87, 10, 242, 35, 109, 208, 26, 79, 114, 164, 8, 111, 32, 254, 17, 206, 20, 79, 76, 129, 72, 142, 154, 152, 67];
+    let mut length_length = 0;
+    let length = read_varint(&vec, &mut length_length);
+    let id = read_varint(&vec[1..], &mut 0);
+    println!("{:?} {:?} {}", length, id, length_length);
 }

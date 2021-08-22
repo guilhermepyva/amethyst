@@ -1,5 +1,4 @@
 use std::time::Duration;
-use crate::net::network_manager;
 use std::thread::JoinHandle;
 use crate::game::player::{PlayerList, Player};
 use std::sync::MutexGuard;
@@ -9,6 +8,7 @@ use crate::game::packets::Packet;
 use crate::net::newer_network_manager::{NetWriter, GameProtocol};
 use std::sync::mpsc::Receiver;
 use crate::game::chat::ChatComponent;
+use crate::game::player_join;
 
 pub fn start(players: PlayerList, net_writer: NetWriter, game_reader: Receiver<GameProtocol>) -> JoinHandle<()> {
     //Ticks
@@ -41,8 +41,9 @@ pub fn start(players: PlayerList, net_writer: NetWriter, game_reader: Receiver<G
                             continue;
                         }
 
-                        println!("Player {} ({}) logged in", nickname, uuid);
-                        sync_environment.players.push(Player {token, nickname, uuid});
+                        let mut player = Player {token, nickname, uuid};
+                        player_join::handle_join(&mut player, &net_writer);
+                        sync_environment.players.push(player);
                     }
                     GameProtocol::Packet {token, packet} => {
 
