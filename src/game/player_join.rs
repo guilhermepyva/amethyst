@@ -7,7 +7,7 @@ use crate::data_writer::DataWriter;
 use std::time::Duration;
 use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
 use std::mem::size_of_val;
-use crate::net::newer_network_manager::NetWriter;
+use crate::net::network_manager::NetWriter;
 
 /*
 36 - join game
@@ -81,23 +81,7 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
     blocks[1][8][8] = torch;
     blocks[1][8][7] = stone;
 
-    let mut matrix = [[0i8; 16]; 16];
-    let light_torch = PosValue::new(8, 8, 13);
-    PosValue::new(7, 8, -1).set(&mut matrix);
-    light_torch.set(&mut matrix);
-
-    ray_casting(&mut matrix, &light_torch);
-
     let mut lightning = [[[5u8; 16]; 16]; 16];
-
-    for z in 0..16 {
-        for x in 0..16 {
-            if matrix[x][z] < 0 {
-                continue;
-            }
-            lightning[1][z][x] = matrix[x][z] as u8;
-        }
-    }
 
     let mut block_light = [0u8; 2048];
     let mut i = 0;
@@ -116,31 +100,31 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
         ground_up_continuous: true,
         x: 0,
         y: 0,
-        data: write_chunk_light(&blocks, &block_light, &skylight)
+        data: write_chunk(&blocks, 1, 1)
     });
 
 
-    let mut id = 256;
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in 0..16 {
-                blocks[y][z][x] = (id << 4) | 0;
-                id += 1;
-            }
-        }
-    }
-
-    std::thread::sleep(Duration::from_secs(1));
-
-    let data = vec![0; (4096 * 2) + (4096 + 256)];
-
-    net_writer.send_packet(token, Packet::ChunkData {
-        x: 0,
-        y: 0,
-        ground_up_continuous: false,
-        bitmask,
-        data: write_chunk(&blocks, 12, 13)
-    });
+    // let mut id = 256;
+    // for y in 0..16 {
+    //     for z in 0..16 {
+    //         for x in 0..16 {
+    //             blocks[y][z][x] = (id << 4) | 0;
+    //             id += 1;
+    //         }
+    //     }
+    // }
+    //
+    // std::thread::sleep(Duration::from_secs(1));
+    //
+    // let data = vec![0; (4096 * 2) + (4096 + 256)];
+    //
+    // net_writer.send_packet(token, Packet::ChunkData {
+    //     x: 0,
+    //     y: 0,
+    //     ground_up_continuous: false,
+    //     bitmask,
+    //     data: write_chunk(&blocks, 12, 13)
+    // });
 
 
     // player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!(
@@ -174,7 +158,7 @@ pub fn write_chunk_light(blocks: &[[[u16; 16]; 16]; 16], block_light: &[u8; 2048
     writer.write_vec_data(&block_light.to_vec());
     writer.write_vec_data(&sky_light.to_vec());
     for x in 0..256 {
-        writer.write_u8(1);
+        writer.write_u8(0);
     }
 
     writer.data

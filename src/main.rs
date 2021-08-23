@@ -6,7 +6,7 @@ use crate::net::packet_listener::PacketListenerStruct;
 use crate::game::position::Position;
 use std::mem::{size_of_val, size_of};
 use std::sync::mpsc::{channel, Sender};
-use crate::net::newer_network_manager::{GameProtocol, NetProtocol, NetWriter};
+use crate::net::network_manager::{GameProtocol, NetProtocol, NetWriter};
 use crate::game::packets::Packet;
 use crate::game::chat::ChatComponent;
 
@@ -23,7 +23,7 @@ fn main() {
 
     let writer = NetWriter {writer: game_writer};
 
-    net::newer_network_manager::start(net_writer, net_reader);
+    net::network_manager::start(net_writer, net_reader);
 
     // net::https::test();
     game::engine::start(players, writer, game_reader).join().expect("couldn't join thread in main thread");

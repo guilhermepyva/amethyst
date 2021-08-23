@@ -13,7 +13,7 @@ use regex::Regex;
 use rustc_serialize::hex::ToHex;
 use openssl::sha::Sha1;
 use std::str::FromStr;
-use crate::net::newer_network_manager::{RawPacket, PlayerLoginClient, ConnectionState};
+use crate::net::network_manager::{RawPacket, PlayerLoginClient, ConnectionState};
 use crate::data_reader::DataReader;
 
 pub enum HandleResult {

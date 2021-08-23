@@ -432,7 +432,7 @@ pub struct RawPacket<'a> {
 fn read_varint<'a>(slice: &[u8], index: &mut usize) -> Option<i32> {
     let mut result: i32 = 0;
     let mut read: u8;
-    for i in 0..=5 {
+    for i in 0..5 {
         read = *slice.get(i)?;
         result += (((read as i8) & 0b01111111) as i32) << (7 * i);
         *index += 1;
@@ -476,13 +476,4 @@ fn read_packets(data: &Vec<u8>) -> Option<Vec<RawPacket>> {
     }
 
     Some(raw_packets)
-}
-
-#[test]
-pub fn test() {
-    let vec = vec![35, 244, 87, 10, 242, 35, 109, 208, 26, 79, 114, 164, 8, 111, 32, 254, 17, 206, 20, 79, 76, 129, 72, 142, 154, 152, 67];
-    let mut length_length = 0;
-    let length = read_varint(&vec, &mut length_length);
-    let id = read_varint(&vec[1..], &mut 0);
-    println!("{:?} {:?} {}", length, id, length_length);
 }

@@ -16,6 +16,7 @@ aes = "0.6.0"
 regex = "1.4.3"
 rustc-serialize = "0.3.24"
 mio = { version = "0.7.13", features = ["os-poll", "net"] }
+arrayvec = "0.7.1"
 
 [profile.release]
 lto = true

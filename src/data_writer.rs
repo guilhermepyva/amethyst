@@ -1,4 +1,5 @@
 use crate::game::position::Position;
+use arrayvec::ArrayVec;
 
 pub struct DataWriter {
     pub data: Vec<u8>
@@ -15,33 +16,11 @@ impl DataWriter {
     }
 
     pub fn write_varint(&mut self, mut value: i32) {
-        loop {
-            let mut temp = (value & 0b01111111) as u8;
-            value >>= 7;
-            if value != 0 {
-                temp |= 0b10000000;
-            }
-            self.data.push(temp);
-
-            if value == 0 {
-                break
-            }
-        }
+        self.data.extend_from_slice(DataWriter::var_num(value as u64).as_slice());
     }
 
     pub fn write_varlong(&mut self, mut value: i64) {
-        loop {
-            let mut temp = (value & 0b01111111) as u8;
-            value >>= 7;
-            if value != 0 {
-                temp |= 0b10000000;
-            }
-            self.data.push(temp);
-
-            if value == 0 {
-                break
-            }
-        }
+        self.data.extend_from_slice(DataWriter::var_num(value as u64).as_slice());
     }
 
     pub fn write_u8(&mut self, value: u8) {
@@ -96,22 +75,27 @@ impl DataWriter {
         self.data.extend_from_slice(&position.encode().to_be_bytes());
     }
 
-    pub fn get_varint(mut value: u32) -> Vec<u8> {
-        let mut data = vec![];
+    pub fn get_varint(value: u32) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(DataWriter::var_num(value as u64).as_slice());
+        vec
+    }
+
+    pub fn var_num(mut value: u64) -> ArrayVec<u8, 10> {
+        let mut array = ArrayVec::<u8, 10>::new();
 
         loop {
             let mut temp = (value & 0b01111111) as u8;
             value >>= 7;
             if value != 0 {
                 temp |= 0b10000000;
-            }
-            data.push(temp);
-
-            if value == 0 {
-                break
+                array.push(temp);
+            } else {
+                array.push(temp);
+                break;
             }
         }
 
-        data
+        array
     }
 }

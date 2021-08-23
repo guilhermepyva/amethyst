@@ -5,7 +5,7 @@ use std::sync::MutexGuard;
 use crate::net::packet_listener::PacketListenerStruct;
 use crate::game::game_chat;
 use crate::game::packets::Packet;
-use crate::net::newer_network_manager::{NetWriter, GameProtocol};
+use crate::net::network_manager::{NetWriter, GameProtocol};
 use std::sync::mpsc::Receiver;
 use crate::game::chat::ChatComponent;
 use crate::game::player_join;

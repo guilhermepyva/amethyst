@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::game::position::Position;
 use crate::game::packets::Packet::InexistentPacket;
 use crate::game::nbt::NBTTag;
-use crate::net::newer_network_manager::ConnectionState;
+use crate::net::network_manager::ConnectionState;
 
 pub enum Packet {
     InexistentPacket,
