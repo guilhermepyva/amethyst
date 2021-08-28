@@ -4,13 +4,10 @@ use crate::game::chat::ChatComponent;
 use json::JsonValue;
 use uuid::Uuid;
 use crate::game::position::Position;
-use crate::game::packets::Packet::InexistentPacket;
 use crate::game::nbt::NBTTag;
 use crate::net::network_manager::ConnectionState;
 
 pub enum Packet {
-    InexistentPacket,
-
     Handshake {
         protocol_version: i32,
         server_address: String,

@@ -18,6 +18,7 @@ use crate::net::login_handler::HandleResult;
 use crate::game::chat::ChatComponent;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
+use crate::net::network_manager::DisconnectReason::{IOError, Timeout};
 
 //Server address
 const ADDR: &str = "127.0.0.1:25565";
@@ -79,6 +80,7 @@ pub struct PlayerClient {
     connection: Connection,
     encode: Cfb8<Aes128>,
     decode: Cfb8<Aes128>,
+    keep_alive: Instant
 }
 
 impl PlayerClient {
@@ -89,6 +91,7 @@ impl PlayerClient {
         self.encode.encrypt(&mut data);
         //Write
         self.connection.stream.write(&data);
+        self.connection.stream.flush();
     }
 
     pub fn write_data_no_length(&mut self, data: &Vec<u8>) {
@@ -157,9 +160,15 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
             login_handler::RSA = Some(rsa);
         }
 
+        let mut last_keepalive = Instant::now();
+
         loop {
             //Poll events
             poll.poll(&mut events, Some(Duration::from_millis(1)));
+
+            let now = Instant::now();
+
+            let send_keepalive = now.duration_since(last_keepalive).as_secs() >= 3;
 
             for event in events.iter() {
                 let token = event.token();
@@ -191,8 +200,6 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                                 poll.registry().register(&mut login_client.connection.stream, login_client.connection.token, Interest::READABLE);
                                 login_clients.insert(login_client.connection.token, login_client);
                                 token_counter += 1;
-
-                                println!("Client connected: {}", client.1.ip())
                             }
 
                             //Check if it reached the end
@@ -267,7 +274,7 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                     if disconnect {
                         if let Some(client) = play_client {
                             client.shutdown("IO Error".to_string(), &poll);
-                            net_writer.send(GameProtocol::ForcedDisconnect {token});
+                            net_writer.send(GameProtocol::ForcedDisconnect {token, reason: IOError});
                             play_clients.remove(&token);
                         } else {
                             login_client.unwrap().shutdown("IO Error".to_string(), &poll);
@@ -305,6 +312,7 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                                         connection: client.connection,
                                         encode: client.encode.unwrap(),
                                         decode: client.decode.unwrap(),
+                                        keep_alive: now
                                     };
 
                                     play_clients.insert(play_client.connection.token, play_client);
@@ -319,13 +327,16 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
 
                     //Read packets
                     match play_client {
-                        Some(t) => {
+                        Some(player) => {
                             for raw_packet in raw_packets {
                                 let packet = Packet::read(raw_packet.id, &mut DataReader::new(raw_packet.data), ConnectionState::Play);
                                 match packet {
-                                    Some(t) => {
+                                    Some(packet) => {
                                         //Send packets to be processed by the tick thread
-                                        net_writer.send(GameProtocol::Packet {token, packet: t});
+                                        match packet {
+                                            Packet::KeepAlive {id} => player.keep_alive = now,
+                                            _ => {net_writer.send(GameProtocol::Packet { token, packet });}
+                                        };
                                     }
                                     None => {}
                                 }
@@ -358,6 +369,28 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                     }
                 }
             }
+
+            if send_keepalive {
+                last_keepalive = now;
+
+                //Check for clients who are taking too long to send the keep alive
+                play_clients.retain(|token, player| {
+                    if now.duration_since(player.keep_alive).as_secs() >= 10 {
+                        //Timeout disconnect
+                        player.shutdown("Timeout".to_string(), &poll);
+                        net_writer.send(GameProtocol::ForcedDisconnect {token: *token, reason: Timeout });
+                        return false;
+                    }
+
+                    true
+                });
+
+                //Send keep alive packets
+                let keep_alive = Packet::KeepAlive {id: 0}.serialize_length().unwrap();
+                for player in play_clients.values_mut() {
+                    player.write_data_no_length(&keep_alive);
+                }
+            }
         }
     });
 }
@@ -387,12 +420,18 @@ pub enum GameProtocol {
         uuid: Uuid
     },
     ForcedDisconnect {
-        token: Token
+        token: Token,
+        reason: DisconnectReason
     },
     Packet {
         token: Token,
         packet: Packet
     }
+}
+
+pub enum DisconnectReason {
+    Timeout,
+    IOError
 }
 
 pub struct NetWriter {

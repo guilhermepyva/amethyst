@@ -67,7 +67,6 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
     net_writer.send_packet(token, Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
 
     let bitmask = 0b0000000000001000 as u16;
-    let mut writer = DataWriter::new();
     let mut blocks = [[[0u16; 16]; 16]; 16];
     let stone = (1 << 4) | 0;
     let torch = (50 << 4) | 5;
@@ -78,31 +77,16 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
             blocks[0][z][x] = stone;
         }
     }
-    blocks[1][8][8] = torch;
-    blocks[1][8][7] = stone;
-
-    let mut lightning = [[[5u8; 16]; 16]; 16];
-
-    let mut block_light = [0u8; 2048];
-    let mut i = 0;
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in (0..16).step_by(2) {
-                block_light[i] = ((lightning[y][z][x + 1] << 4) + lightning[y][z][x]);
-                i += 1;
-            }
-        }
-    }
-    let mut skylight = [0u8; 2048];
 
     net_writer.send_packet(token, Packet::ChunkData {
         bitmask,
         ground_up_continuous: true,
         x: 0,
         y: 0,
-        data: write_chunk(&blocks, 1, 1)
+        data: write_chunk(&blocks, 16, 16)
     });
 
+    net_writer.send_packet(token, Packet::KeepAlive {id: 4});
 
     // let mut id = 256;
     // for y in 0..16 {
@@ -117,15 +101,6 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
     // std::thread::sleep(Duration::from_secs(1));
     //
     // let data = vec![0; (4096 * 2) + (4096 + 256)];
-    //
-    // net_writer.send_packet(token, Packet::ChunkData {
-    //     x: 0,
-    //     y: 0,
-    //     ground_up_continuous: false,
-    //     bitmask,
-    //     data: write_chunk(&blocks, 12, 13)
-    // });
-
 
     // player.connection.send_packet(&Packet::WindowItems {window_id: 0, slots: vec!(
     //     Slot {

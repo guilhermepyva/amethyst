@@ -32,7 +32,7 @@ impl DataWriter {
     }
 
     pub fn write_u16_le(&mut self, value: u16) {
-        self.data.extend_from_slice(&value.to_be_bytes());
+        self.data.extend_from_slice(&value.to_le_bytes());
     }
 
     pub fn write_i8(&mut self, value: i8) {
