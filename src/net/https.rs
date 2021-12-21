@@ -1,10 +1,8 @@
 use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
+use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::io::{Write, Read};
 
-pub struct HttpsConnection {
-
-}
+pub struct HttpsConnection {}
 
 #[test]
 pub fn test() {
@@ -12,10 +10,12 @@ pub fn test() {
     connector.set_verify(SslVerifyMode::NONE);
     let connector = connector.build();
 
-    let mut stream = connector.connect(
-        "sessionserver.mojang.com",
-        TcpStream::connect("sessionserver.mojang.com:443").unwrap()
-    ).unwrap();
+    let mut stream = connector
+        .connect(
+            "sessionserver.mojang.com",
+            TcpStream::connect("sessionserver.mojang.com:443").unwrap(),
+        )
+        .unwrap();
 
     println!("{:?}", stream);
 

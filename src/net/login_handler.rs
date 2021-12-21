@@ -1,43 +1,49 @@
-use crate::game::packets::Packet;
-use json::JsonValue;
-use json::number::Number;
+use crate::data_reader::DataReader;
 use crate::game::chat::ChatComponent;
-use openssl::rsa::{Rsa, Padding};
-use openssl::pkey::Private;
-use rand::{Rng, thread_rng};
-use cfb8::Cfb8;
-use aes::Aes128;
-use uuid::Uuid;
+use crate::game::packets::Packet;
+use crate::net::network_manager::{ConnectionState, PlayerLoginClient, RawPacket};
 use aes::cipher::NewStreamCipher;
+use aes::Aes128;
+use cfb8::Cfb8;
+use json::number::Number;
+use json::JsonValue;
+use openssl::pkey::Private;
+use openssl::rsa::{Padding, Rsa};
+use openssl::sha::Sha1;
+use rand::{thread_rng, Rng};
 use regex::Regex;
 use rustc_serialize::hex::ToHex;
-use openssl::sha::Sha1;
 use std::str::FromStr;
-use crate::net::network_manager::{RawPacket, PlayerLoginClient, ConnectionState};
-use crate::data_reader::DataReader;
+use uuid::Uuid;
 
 pub enum HandleResult {
     Disconnect(&'static str),
     Login,
-    None
+    None,
 }
 
 pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> HandleResult {
     let mut result = HandleResult::None;
 
     for raw in packets {
-        let packet = match Packet::read(raw.id, &mut DataReader::new(raw.data), client.state) {Some(t) => t, None => continue};
+        let packet = match Packet::read(raw.id, &mut DataReader::new(raw.data), client.state) {
+            Some(t) => t,
+            None => continue,
+        };
         match packet {
-            Packet::Handshake {next_state, protocol_version, server_address, server_port} => {
-                match next_state {
-                    1 => client.state = ConnectionState::Status,
-                    2 => client.state = ConnectionState::Login,
-                    _ => {
-                        result = HandleResult::Disconnect("Invalid handshake next state");
-                        break;
-                    }
+            Packet::Handshake {
+                next_state,
+                protocol_version,
+                server_address,
+                server_port,
+            } => match next_state {
+                1 => client.state = ConnectionState::Status,
+                2 => client.state = ConnectionState::Login,
+                _ => {
+                    result = HandleResult::Disconnect("Invalid handshake next state");
+                    break;
                 }
-            }
+            },
             Packet::StatusRequest => {
                 let mut json = JsonValue::new_object();
                 let mut version = JsonValue::new_object();
@@ -48,21 +54,33 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> Handle
                 players["max"] = JsonValue::Number(Number::from(10 as u8));
                 players["online"] = JsonValue::Number(Number::from(0 as u8));
                 json["players"] = players;
-                json["description"] = ChatComponent::new_text("Amethyst Minecraft Server".to_owned()).to_json();
-                client.write(Packet::StatusResponse {json});
+                json["description"] =
+                    ChatComponent::new_text("Amethyst Minecraft Server".to_owned()).to_json();
+                client.write(Packet::StatusResponse { json });
             }
-            Packet::Ping {ping} => client.write(Packet::Pong {pong: ping}),
-            Packet::LoginStart {nickname} => {
+            Packet::Ping { ping } => client.write(Packet::Pong { pong: ping }),
+            Packet::LoginStart { nickname } => {
                 client.verify_token = Some(thread_rng().gen::<[u8; 4]>());
-                client.write(Packet::EncryptionRequest {server: String::new(), public_key: get_publick_key().clone(), verify_token: client.verify_token.unwrap().clone()});
+                client.write(Packet::EncryptionRequest {
+                    server: String::new(),
+                    public_key: get_publick_key().clone(),
+                    verify_token: client.verify_token.unwrap().clone(),
+                });
                 client.connection.identifier = nickname.clone();
                 client.nickname = Some(nickname)
             }
-            Packet::EncryptionResponse {verify_token, shared_secret} => {
+            Packet::EncryptionResponse {
+                verify_token,
+                shared_secret,
+            } => {
                 let rsa = get_rsa();
                 let mut decrypted_verify_token = [0 as u8; 128];
-                match rsa.private_decrypt(&verify_token, &mut decrypted_verify_token, Padding::PKCS1) {
-                    Ok(_t) => {},
+                match rsa.private_decrypt(
+                    &verify_token,
+                    &mut decrypted_verify_token,
+                    Padding::PKCS1,
+                ) {
+                    Ok(_t) => {}
                     Err(_e) => {
                         result = HandleResult::Disconnect("Invalid verify token");
                         break;
@@ -75,7 +93,11 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> Handle
                 }
 
                 let mut decrypted_shared_secret = [0 as u8; 128];
-                let shared_secret_length = match rsa.private_decrypt(&shared_secret, &mut decrypted_shared_secret, Padding::PKCS1) {
+                let shared_secret_length = match rsa.private_decrypt(
+                    &shared_secret,
+                    &mut decrypted_shared_secret,
+                    Padding::PKCS1,
+                ) {
                     Ok(t) => t,
                     Err(_e) => {
                         result = HandleResult::Disconnect("Invalid shared secret");
@@ -84,8 +106,10 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> Handle
                 };
                 let shared_secret = &decrypted_shared_secret[0..shared_secret_length];
 
-                client.encode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
-                client.decode = Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
+                client.encode =
+                    Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
+                client.decode =
+                    Some(Cfb8::<Aes128>::new_var(shared_secret, shared_secret).unwrap());
 
                 let mut sha1 = Sha1::new();
                 sha1.update(b"");
@@ -133,7 +157,7 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> Handle
 
                 client.write(Packet::LoginSuccess {
                     uuid: client.uuid.clone().unwrap(),
-                    nickname: client.nickname.clone().unwrap()
+                    nickname: client.nickname.clone().unwrap(),
                 });
                 result = HandleResult::Login;
                 break;
@@ -151,16 +175,16 @@ pub fn handle(packets: Vec<RawPacket>, client: &mut PlayerLoginClient) -> Handle
 fn parse_json(mut json: JsonValue) -> Option<(Uuid, String)> {
     let uuid = match json["id"].as_str() {
         Some(t) => t,
-        None => return None
+        None => return None,
     };
     let uuid = match Uuid::from_str(uuid) {
         Ok(t) => t,
-        Err(e) => return None
+        Err(e) => return None,
     };
 
     let name = match json["name"].take_string() {
         Some(t) => t,
-        None => return None
+        None => return None,
     };
 
     return Some((uuid, name));
@@ -193,8 +217,7 @@ fn hex_digest(sha1: Sha1) -> String {
     if negative {
         two_complement(&mut hex);
         format!("-{}", regex.replace(&hex.to_hex(), "").to_string())
-    }
-    else {
+    } else {
         regex.replace(&hex.to_hex(), "").to_string()
     }
 }

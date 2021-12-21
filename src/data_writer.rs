@@ -1,13 +1,19 @@
-use crate::game::position::Position;
+use crate::game::world::coords::Position;
 use arrayvec::ArrayVec;
 
 pub struct DataWriter {
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 impl DataWriter {
     pub fn new() -> DataWriter {
         DataWriter { data: Vec::new() }
+    }
+
+    pub fn with_capacity(capacity: usize) -> DataWriter {
+        DataWriter {
+            data: Vec::with_capacity(capacity),
+        }
     }
 
     pub fn write_string(&mut self, string: &String) {
@@ -16,11 +22,13 @@ impl DataWriter {
     }
 
     pub fn write_varint(&mut self, mut value: i32) {
-        self.data.extend_from_slice(DataWriter::var_num(value as u64).as_slice());
+        self.data
+            .extend_from_slice(DataWriter::var_num(value as u64).as_slice());
     }
 
     pub fn write_varlong(&mut self, mut value: i64) {
-        self.data.extend_from_slice(DataWriter::var_num(value as u64).as_slice());
+        self.data
+            .extend_from_slice(DataWriter::var_num(value as u64).as_slice());
     }
 
     pub fn write_u8(&mut self, value: u8) {
@@ -60,7 +68,7 @@ impl DataWriter {
     }
 
     pub fn write_bool(&mut self, value: bool) {
-        self.data.push(if value {0x01} else {0x00})
+        self.data.push(if value { 0x01 } else { 0x00 })
     }
 
     pub fn write_vec_data(&mut self, data: &Vec<u8>) {
@@ -72,7 +80,8 @@ impl DataWriter {
     }
 
     pub fn write_position(&mut self, position: &Position) {
-        self.data.extend_from_slice(&position.encode().to_be_bytes());
+        self.data
+            .extend_from_slice(&position.encode().to_be_bytes());
     }
 
     pub fn get_varint(value: u32) -> Vec<u8> {

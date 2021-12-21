@@ -1,13 +1,16 @@
-use crate::game::player::Player;
-use crate::game::packets::{Packet, PlayerInfoPlayer, PlayerInfoAction, WorldBorderAction, Slot};
-use crate::game::position::Position;
-use crate::game::nbt::{NBTTag, CompoundElement};
-use crate::game::chat::ChatComponent;
 use crate::data_writer::DataWriter;
-use std::time::Duration;
-use crate::game::ray_tracing::{PosValue, ray_casting, print_matrix};
-use std::mem::size_of_val;
+use crate::game::chat::ChatComponent;
+use crate::game::engine::SyncEnvironment;
+use crate::game::nbt::{CompoundElement, NBTTag};
+use crate::game::packets::{Packet, PlayerInfoAction, PlayerInfoPlayer, Slot, WorldBorderAction};
+use crate::game::player::Player;
+use crate::game::world::angle::Angle;
+use crate::game::world::block::Material;
+use crate::game::world::chunk::{ChunkPos, ChunkSection};
+use crate::game::world::coords::{Point, Position};
 use crate::net::network_manager::NetWriter;
+use std::mem::size_of_val;
+use std::time::{Duration, Instant};
 
 /*
 36 - join game
@@ -26,67 +29,91 @@ use crate::net::network_manager::NetWriter;
 19 - window items
  */
 
-pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
-    println!("Player {} ({}) joined the server", player.nickname, player.uuid);
+pub fn handle_join(player: &mut Player, net_writer: &NetWriter, environment: &mut SyncEnvironment) {
+    println!(
+        "Player {} ({}) joined the server",
+        player.nickname, player.uuid
+    );
     let token = player.token;
     net_writer.send_packet(token, Packet::KeepAlive { id: 0 });
-    net_writer.send_packet(token, Packet::JoinGame {
-        entity_id: 0,
-        gamemode: 1,
-        dimension: 0,
-        difficulty: 0,
-        max_players: 255,
-        level_type: "teste".to_string(),
-        reduced_debug_info: false
-    });
-    net_writer.send_packet(token, Packet::SpawnPosition {location: Position {
-        x: 0,
-        y: 50,
-        z: 0
-    }});
-    net_writer.send_packet(token, Packet::HeldItemChange {slot: 0});
-    net_writer.send_packet(token, Packet::PlayerInfo {action_id: 0, players: vec!(PlayerInfoPlayer {
-        uuid: player.uuid.clone(),
-        action: PlayerInfoAction::AddPlayer {
-            name: player.nickname.clone(),
-            properties: vec!(),
-            gamemode: 0,
-            ping: 0,
-            display_name: Option::from(ChatComponent::new_text(player.nickname.clone()))
-        }
-    })});
-    net_writer.send_packet(token, Packet::PlayerPositionAndLook {
-        x: 0.0,
-        y: 50.0,
-        z: 0.0,
-        yaw: 0.0,
-        pitch: 0.0,
-        flags: 0
-    });
-    net_writer.send_packet(token, Packet::WorldBorder {action: WorldBorderAction::SetSize {radius: 100f64}});
-    net_writer.send_packet(token, Packet::TimeUpdate {world_age: 0, time_of_day: 12000});
+    net_writer.send_packet(
+        token,
+        Packet::JoinGame {
+            entity_id: 0,
+            gamemode: 1,
+            dimension: 0,
+            difficulty: 0,
+            max_players: 255,
+            level_type: environment.world.level_type.to_str().to_string(),
+            reduced_debug_info: false,
+        },
+    );
+    net_writer.send_packet(
+        token,
+        Packet::SpawnPosition {
+            location: Position { x: 0, y: 50, z: 0 },
+        },
+    );
+    net_writer.send_packet(token, Packet::HeldItemChange { slot: 0 });
+    net_writer.send_packet(
+        token,
+        Packet::PlayerInfo {
+            action_id: 0,
+            players: vec![PlayerInfoPlayer {
+                uuid: player.uuid.clone(),
+                action: PlayerInfoAction::AddPlayer {
+                    name: player.nickname.clone(),
+                    properties: vec![],
+                    gamemode: 0,
+                    ping: 0,
+                    display_name: Option::from(ChatComponent::new_text(player.nickname.clone())),
+                },
+            }],
+        },
+    );
+    net_writer.send_packet(
+        token,
+        Packet::PlayerPositionAndLook {
+            x: 0.0,
+            y: 51.0,
+            z: 0.0,
+            yaw: 0.0,
+            pitch: 0.0,
+            flags: 0,
+        },
+    );
+    net_writer.send_packet(
+        token,
+        Packet::WorldBorder {
+            action: WorldBorderAction::SetSize { radius: 100f64 },
+        },
+    );
+    net_writer.send_packet(
+        token,
+        Packet::TimeUpdate {
+            world_age: 0,
+            time_of_day: 12000,
+        },
+    );
 
-    let bitmask = 0b0000000000001000 as u16;
-    let mut blocks = [[[0u16; 16]; 16]; 16];
-    let stone = (1 << 4) | 0;
-    let torch = (50 << 4) | 5;
-    let dirt = (3 << 4) | 0;
-
-    for z in 0..16 {
-        for x in 0..16 {
-            blocks[0][z][x] = stone;
-        }
+    let now = Instant::now();
+    for x in environment.world.chunks.iter() {
+        net_writer.send_packet(token, x.write_chunk_data());
     }
+    println!("{}", now.elapsed().as_nanos());
 
-    net_writer.send_packet(token, Packet::ChunkData {
-        bitmask,
-        ground_up_continuous: true,
-        x: 0,
-        y: 0,
-        data: write_chunk(&blocks, 16, 16)
-    });
+    net_writer.send_packet(token, Packet::KeepAlive { id: 4 });
 
-    net_writer.send_packet(token, Packet::KeepAlive {id: 4});
+    // net_writer.send_packet(token, Packet::SpawnObject {
+    //     id: 69,
+    //     object: 60,
+    //     point: Point {x: 0f64, y: 60f64, z: 0f64},
+    //     angle: Angle {pitch: 20, yaw: 20},
+    //     data: 0,
+    //     vel_x: None,
+    //     vel_y: None,
+    //     vel_z: None
+    // })
 
     // let mut id = 256;
     // for y in 0..16 {
@@ -119,44 +146,4 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter) {
     //         })
     //     }
     // )});
-}
-
-pub fn write_chunk_light(blocks: &[[[u16; 16]; 16]; 16], block_light: &[u8; 2048], sky_light: &[u8; 2048]) -> Vec<u8> {
-    let mut writer = DataWriter::new();
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in 0..16 {
-                writer.write_u16_le(blocks[y][z][x]);
-            }
-        }
-    }
-    writer.write_vec_data(&block_light.to_vec());
-    writer.write_vec_data(&sky_light.to_vec());
-    for x in 0..256 {
-        writer.write_u8(0);
-    }
-
-    writer.data
-}
-
-pub fn write_chunk(blocks: &[[[u16; 16]; 16]; 16], block_light: u8, sky_light: u8) -> Vec<u8> {
-    let mut writer = DataWriter::new();
-    for y in 0..16 {
-        for z in 0..16 {
-            for x in 0..16 {
-                writer.write_u16_le(blocks[y][z][x]);
-            }
-        }
-    }
-    for x in 0..2048 {
-        writer.write_u8((block_light << 4) | block_light);
-    }
-    for x in 0..2048 {
-        writer.write_u8((sky_light << 4) | sky_light);
-    }
-    for x in 0..256 {
-        writer.write_u8(1);
-    }
-
-    writer.data
 }
