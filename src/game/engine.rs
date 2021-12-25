@@ -18,7 +18,7 @@ pub fn start(
     players: PlayerList,
     net_writer: NetWriter,
     game_reader: Receiver<GameProtocol>,
-) -> JoinHandle<()> {
+) {
     let packet_listeners = [
         // PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
         PacketListenerStruct {

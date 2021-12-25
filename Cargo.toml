@@ -8,7 +8,6 @@ edition = "2018"
 
 [dependencies]
 uuid = { version = "0.8", features = ["v4"] }
-openssl = "0.10.30"
 json = "0.12.4"
 rand = "0.7.3"
 cfb8 = "0.6.0"
