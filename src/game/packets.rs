@@ -1,12 +1,16 @@
+use std::time::Instant;
 use crate::data_reader::DataReader;
 use crate::data_writer::DataWriter;
 use crate::game::chat::ChatComponent;
 use crate::game::nbt::NBTTag;
 use crate::game::world::angle::Angle;
 use crate::game::world::coords::{Point, Position};
-use crate::net::network_manager::ConnectionState;
+use crate::net::network_manager::{ConnectionState, PlayerClient};
 use json::JsonValue;
+use regex::internal::Inst;
 use uuid::Uuid;
+use crate::game::world::chunk::ChunkPos;
+use crate::game::world::world::World;
 
 pub enum Packet {
     Handshake {
@@ -94,14 +98,20 @@ pub enum Packet {
         window_id: u8,
         slots: Vec<Slot>,
     },
-    ChunkData {
-        x: i32,
-        y: i32,
-        ground_up_continuous: bool,
-        bitmask: u16,
-        //Tests only
-        data: Vec<u8>,
-    },
+    //ChunkData and MapChunkBulk were moved to ExtendedPacket's
+    // ChunkData {
+    //     x: i32,
+    //     y: i32,
+    //     ground_up_continuous: bool,
+    //     bitmask: u16,
+    //     //Tests only
+    //     data: Vec<u8>,
+    // },
+    // MapChunkBulk {
+    //     world: &'a World,
+    //     center: ChunkPos,
+    //     radius: u8
+    // },
     ClientChatMessage {
         message: String,
     },
@@ -453,21 +463,6 @@ impl Packet {
                     }
                 }
             }
-            Packet::ChunkData {
-                x,
-                y,
-                ground_up_continuous,
-                bitmask,
-                data,
-            } => {
-                writer.write_u8(0x21);
-                writer.write_i32(*x);
-                writer.write_i32(*y);
-                writer.write_bool(*ground_up_continuous);
-                writer.write_u16(*bitmask);
-                writer.write_varint((data.len() as i32));
-                writer.write_vec_data(data);
-            }
             Packet::ServerChatMessage { component, pos } => {
                 writer.write_u8(0x02);
                 writer.write_string(&component.to_string());
@@ -511,7 +506,65 @@ impl Packet {
 
     pub fn serialize_length(&self) -> Option<Vec<u8>> {
         let mut data = self.serialize()?;
-        data.splice(0..0, DataWriter::get_varint(data.len() as u32));
+        data.splice(0..0, DataWriter::var_num(data.len() as u64));
         Some(data)
+    }
+}
+
+pub enum ExtendedPacket {
+    ChunkData {
+        x: i32,
+        y: i32,
+        ground_up_continuous: bool,
+        bitmask: u16,
+        data: Vec<u8>,
+    },
+    MapChunkBulk {
+        sky_light: bool,
+        chunks: Vec<ChunkMeta>,
+        data: Vec<u8>
+    }
+}
+
+pub struct ChunkMeta {
+    pub pos: ChunkPos,
+    pub bitmask: u16
+}
+
+impl ExtendedPacket {
+    pub fn send(self, client: &mut PlayerClient) {
+        match self {
+            ExtendedPacket::ChunkData {x, y, ground_up_continuous, bitmask, data} => {
+                let mut writer = DataWriter::new();
+
+                writer.write_u8(0x21);
+                writer.write_i32(x);
+                writer.write_i32(y);
+                writer.write_bool(ground_up_continuous);
+                writer.write_u16(bitmask);
+                writer.write_varint((data.len() as i32));
+
+                client.write_mut_slice(DataWriter::var_num((writer.data.len() + data.len()) as u64).as_mut_slice());
+                client.write_data_owned(writer.data);
+                client.write_data_owned(data);
+            }
+            ExtendedPacket::MapChunkBulk { sky_light, chunks, data } => {
+                let mut writer = DataWriter::new();
+
+                writer.write_varint(0x26);
+                writer.write_bool(sky_light);
+                writer.write_varint(chunks.len() as i32);
+                for chunk in chunks {
+                    writer.write_i32(chunk.pos.x);
+                    writer.write_i32(chunk.pos.z);
+                    writer.write_u16(chunk.bitmask);
+                }
+
+                client.write_mut_slice(DataWriter::var_num((writer.data.len() + data.len()) as u64).as_mut_slice());
+                client.write_data_owned(writer.data);
+                client.write_data_owned(data);
+            }
+            _ => panic!("Serialization not implemented for this packet")
+        }
     }
 }

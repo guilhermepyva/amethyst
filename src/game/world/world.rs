@@ -1,13 +1,18 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use crate::game::world::block::Block;
-use crate::game::world::chunk::{ChunkColumn, ChunkPos};
+use crate::game::world::chunk::{ChunkColumn, ChunkPos, ChunkSection};
 use crate::game::world::coords::Position;
 use std::time::Instant;
+use crate::data_writer::DataWriter;
+use crate::game::packets::{ChunkMeta, ExtendedPacket};
+use crate::Packet;
 
 pub struct World {
     pub name: String,
     pub difficulty: u8,
     pub level_type: LevelType,
-    pub chunks: Vec<ChunkColumn>,
+    pub chunks: HashMap<ChunkPos, ChunkColumn>,
 }
 
 impl World {
@@ -16,7 +21,7 @@ impl World {
             name,
             difficulty,
             level_type,
-            chunks: Vec::new(),
+            chunks: HashMap::new(),
         }
     }
 
@@ -114,23 +119,38 @@ impl World {
     }
 
     pub fn get_chunk(&self, chunk_pos: ChunkPos) -> Option<&ChunkColumn> {
-        self.chunks
-            .iter()
-            .find(|x| x.get_chunk_pos().eq(&chunk_pos))
+        self.chunks.get(&chunk_pos)
     }
 
     pub fn allocate_chunk(&mut self, chunk_pos: ChunkPos) -> &mut ChunkColumn {
-        let index = self
-            .chunks
-            .iter()
-            .position(|x| x.get_chunk_pos().eq(&chunk_pos));
-        match index {
-            None => {
-                self.chunks.push(ChunkColumn::new(chunk_pos));
-                self.chunks.last_mut().unwrap()
-            }
-            Some(x) => &mut self.chunks[x],
+        let entry = self.chunks.entry(chunk_pos);
+
+        match entry {
+            Entry::Occupied(mut occupied) => occupied.into_mut(),
+            Entry::Vacant(vacant) => vacant.insert(ChunkColumn::new(chunk_pos))
         }
+    }
+
+    pub fn get_map_bulk_packet(&self, center: ChunkPos, radius: u8) -> ExtendedPacket {
+        let mut chunks = Vec::with_capacity(self.chunks.len());
+        let mut data_size = 0usize;
+
+        for (pos, chunk) in self.chunks.iter() {
+            let bitmask = chunk.bitmask();
+
+            chunks.push(ChunkMeta {
+                pos: *pos,
+                bitmask: bitmask.0
+            });
+
+            data_size += (bitmask.1 * ChunkSection::CHUNK_SECTION_PACKET_SIZE) + ChunkSection::CHUNK_BIOME_SIZE;
+        }
+
+        let mut data = Vec::with_capacity(data_size);
+
+        self.chunks.values().for_each(|chunk| chunk.write(&mut data));
+
+        ExtendedPacket::MapChunkBulk {sky_light: true, chunks, data}
     }
 }
 

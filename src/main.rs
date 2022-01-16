@@ -26,10 +26,6 @@ fn main() {
 
     net::network_manager::start(net_writer, net_reader);
 
-    let opt = Some(4);
-
     // net::https::test();
-    game::engine::start(players, writer, game_reader)
-        .join()
-        .expect("couldn't join thread in main thread");
+    game::engine::start(players, writer, game_reader);
 }

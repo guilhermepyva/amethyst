@@ -18,7 +18,7 @@ pub fn start(
     players: PlayerList,
     net_writer: NetWriter,
     game_reader: Receiver<GameProtocol>,
-) -> JoinHandle<()> {
+) -> ! {
     let packet_listeners = [
         // PacketListenerStruct {packet_id: 0x00, listener: network_manager::keep_alive_listener},
         PacketListenerStruct {
@@ -88,8 +88,6 @@ pub fn start(
                     GameProtocol::Packet { token, packet } => {}
                 }
             }
-
-            drop(sync_environment);
         }
         //You need to drop everything before this sleep
         std::thread::sleep(Duration::from_millis(50));

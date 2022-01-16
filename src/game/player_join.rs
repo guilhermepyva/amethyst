@@ -5,8 +5,8 @@ use crate::game::nbt::{CompoundElement, NBTTag};
 use crate::game::packets::{Packet, PlayerInfoAction, PlayerInfoPlayer, Slot, WorldBorderAction};
 use crate::game::player::Player;
 use crate::game::world::angle::Angle;
-use crate::game::world::block::Material;
-use crate::game::world::chunk::{ChunkPos, ChunkSection};
+use crate::game::world::block::{Block, Material};
+use crate::game::world::chunk::{ChunkColumn, ChunkPos, ChunkSection};
 use crate::game::world::coords::{Point, Position};
 use crate::net::network_manager::NetWriter;
 use std::mem::size_of_val;
@@ -97,12 +97,37 @@ pub fn handle_join(player: &mut Player, net_writer: &NetWriter, environment: &mu
     );
 
     let now = Instant::now();
-    for x in environment.world.chunks.iter() {
-        net_writer.send_packet(token, x.write_chunk_data());
-    }
-    println!("{}", now.elapsed().as_nanos());
-
+    // let mut vec = Vec::with_capacity(16);
+    // for x in environment.world.chunks.values() {
+    //     vec.push(x.write_chunk_data());
+    // }
+    // println!("total {:?}", now.elapsed());
+    // for x in vec {
+    //     net_writer.send_packet(token, x);
+    // }
+    // let packet = environment.world.get_map_bulk_packet(ChunkPos::default(), 0);
+    // net_writer.send_packet(token, environment.world.get_map_bulk_packet(ChunkPos::default(), 0));
+    // println!("{:?}", now.elapsed());
     net_writer.send_packet(token, Packet::KeepAlive { id: 4 });
+
+    let packet = environment.world.get_map_bulk_packet(ChunkPos::default(), 0);
+    net_writer.send_extended_packet(token, packet);
+
+    let mut fake_column = ChunkColumn::new(ChunkPos {x: 1, z: 0});
+    let section = fake_column.allocate_section(2);
+    let stone = Block::from_material(Material { id: 1 });
+
+    for x in 0..16 {
+        for y in 0..16 {
+            for z in 0..16 {
+                section.blocks[x][y][z] = stone.get_encoded();
+            }
+        }
+    }
+
+    let packet = fake_column.write_chunk_data();
+
+    net_writer.send_extended_packet(token, packet);
 
     // net_writer.send_packet(token, Packet::SpawnObject {
     //     id: 69,

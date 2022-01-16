@@ -1,9 +1,11 @@
 use crate::data_writer::DataWriter;
-use crate::game::packets::Packet;
+use crate::game::packets::{ExtendedPacket, Packet};
 use crate::game::world::block::{Block, Material};
 use crate::game::world::world::LevelType::Default11;
 use std::mem::size_of_val;
-use std::time::Instant;
+use std::str::from_boxed_utf8_unchecked;
+use std::time::{Duration, Instant};
+use regex::internal::Inst;
 
 #[derive(Copy, Clone, Default, Eq, PartialEq, Hash)]
 pub struct ChunkPos {
@@ -40,7 +42,8 @@ impl ChunkSection {
         }
     }
 
-    pub const CHUNK_SECTION_PACKET_SIZE: usize = 12544;
+    pub const CHUNK_SECTION_PACKET_SIZE: usize = 12288;
+    pub const CHUNK_BIOME_SIZE: usize = 256;
 }
 
 impl Default for ChunkSection {
@@ -81,53 +84,41 @@ impl ChunkColumn {
         };
     }
 
-    pub fn write_chunk_data(&self) -> Packet {
-        let now = Instant::now();
-
-        let bitmask = {
-            let mut x = 0;
-            for y in self.sections.iter().enumerate() {
-                if y.1.is_some() {
-                    x |= 1 << y.0;
-                }
+    pub fn bitmask(&self) -> (u16, usize) {
+        let mut alive_sections = 0usize;
+        let mut bitmask = 0u16;
+        for y in self.sections.iter().enumerate() {
+            if y.1.is_some() {
+                bitmask |= 1 << y.0;
+                alive_sections += 1;
             }
-            x
-        };
-
-        let sections = self
-            .sections
-            .iter()
-            .filter_map(|x| x.as_ref())
-            .collect::<Vec<&Box<ChunkSection>>>();
-
-        let mut data =
-            DataWriter::with_capacity(sections.len() * ChunkSection::CHUNK_SECTION_PACKET_SIZE);
-
-        for x in sections.iter() {
-            data.write_data(&bytemuck::cast_slice(&x.blocks));
         }
+        (bitmask, alive_sections)
+    }
 
-        for x in sections.iter() {
-            data.write_data(&x.block_light);
-        }
+    pub fn write_chunk_data(&self) -> ExtendedPacket {
+        let bitmask = self.bitmask();
 
-        for x in sections.iter() {
-            data.write_data(&x.sky_light);
-        }
+        let mut vec = Vec::with_capacity((bitmask.1 * ChunkSection::CHUNK_SECTION_PACKET_SIZE) + ChunkSection::CHUNK_BIOME_SIZE);
+        self.write(&mut vec);
 
-        data.write_data(&[0u8; 256]);
-
-        println!("total size {}", data.data.len());
-        println!("bitmask {:016b}", bitmask);
-        println!("elapsed write sections {:?}", now.elapsed());
-
-        Packet::ChunkData {
+        ExtendedPacket::ChunkData {
             x: self.chunk_pos.x,
             y: self.chunk_pos.z,
             ground_up_continuous: true,
-            bitmask,
-            data: data.data,
+            bitmask: bitmask.0,
+            data: vec
         }
+    }
+
+    pub fn write(&self, data: &mut Vec<u8>) {
+        let iterator = self.sections.iter().filter_map(|x| x.as_ref());
+
+        iterator.clone().for_each(|x| data.extend_from_slice(&bytemuck::cast_slice(&x.blocks)));
+        iterator.clone().for_each(|x| data.extend_from_slice(&x.block_light));
+        iterator.clone().for_each(|x| data.extend_from_slice(&x.sky_light));
+
+        data.extend_from_slice(&[0u8; 256]);
     }
 
     #[inline]

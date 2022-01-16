@@ -1,7 +1,7 @@
 use crate::data_reader::DataReader;
 use crate::data_writer::DataWriter;
 use crate::game::chat::ChatComponent;
-use crate::game::packets::Packet;
+use crate::game::packets::{ExtendedPacket, Packet};
 use crate::net::login_handler;
 use crate::net::login_handler::HandleResult;
 use crate::net::network_manager::DisconnectReason::{IOError, Timeout};
@@ -18,6 +18,7 @@ use std::net::{Shutdown, SocketAddr};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use regex::internal::Inst;
 use uuid::Uuid;
 
 //Server address
@@ -105,11 +106,24 @@ impl PlayerClient {
         self.connection.stream.flush();
     }
 
-    pub fn write_data(&mut self, data: &Vec<u8>) {
-        //Serialize
+    pub fn write_data_ref(&mut self, data: &Vec<u8>) {
         let mut data = data.clone();
         //Encrypt
         self.encode.encrypt(&mut data);
+        //Write
+        self.connection.stream.write(&data);
+    }
+
+    pub fn write_data_owned(&mut self, mut data: Vec<u8>) {
+        //Encrypt
+        self.encode.encrypt(&mut data);
+        //Write
+        self.connection.stream.write(&data);
+    }
+
+    pub fn write_mut_slice(&mut self, data: &mut [u8]) {
+        //Encrypt
+        self.encode.encrypt(data);
         //Write
         self.connection.stream.write(&data);
     }
@@ -227,8 +241,7 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                                         login_client.connection.token,
                                         Interest::READABLE,
                                     );
-                                    login_clients
-                                        .insert(login_client.connection.token, login_client);
+                                    login_clients.insert(login_client.connection.token, login_client);
                                     token_counter += 1;
                                 }
 
@@ -423,12 +436,27 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                             };
                             client.write(packet);
                         }
+                        NetProtocol::SendExtendedPacket { token, mut packet } => {
+                            let mut client = match play_clients.get_mut(&token) {
+                                Some(t) => t,
+                                None => continue,
+                            };
+
+                            packet.send(&mut client);
+                        }
                         NetProtocol::SendData { token, packet } => {
                             let client = match play_clients.get_mut(&token) {
                                 Some(t) => t,
                                 None => continue,
                             };
-                            client.write_data(&packet);
+                            client.write_data_ref(&packet);
+                        }
+                        NetProtocol::SendOwnedData { token, data } => {
+                            let client = match play_clients.get_mut(&token) {
+                                Some(t) => t,
+                                None => continue,
+                            };
+                            client.write_data_owned(data);
                         }
                         NetProtocol::Unregister { token } => {
                             let client = match play_clients.get_mut(&token) {
@@ -462,7 +490,7 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
                     //Send keep alive packets
                     let keep_alive = Packet::KeepAlive { id: 0 }.serialize_length().unwrap();
                     for player in play_clients.values_mut() {
-                        player.write_data(&keep_alive);
+                        player.write_data_ref(&keep_alive);
                     }
                 }
             }
@@ -471,7 +499,9 @@ pub fn start(net_writer: Sender<GameProtocol>, net_reader: Receiver<NetProtocol>
 
 pub enum NetProtocol {
     SendPacket { token: Token, packet: Packet },
+    SendExtendedPacket { token: Token, packet: ExtendedPacket },
     SendData { token: Token, packet: Arc<Vec<u8>> },
+    SendOwnedData { token: Token, data: Vec<u8> },
     Unregister { token: Token },
 }
 
@@ -503,6 +533,10 @@ pub struct NetWriter {
 impl NetWriter {
     pub fn send_packet(&self, token: Token, packet: Packet) {
         self.writer.send(NetProtocol::SendPacket { token, packet });
+    }
+
+    pub fn send_extended_packet(&self, token: Token, packet: ExtendedPacket) {
+        self.writer.send(NetProtocol::SendExtendedPacket {token, packet});
     }
 
     pub fn send_data(&self, token: Token, data: Arc<Vec<u8>>) {
