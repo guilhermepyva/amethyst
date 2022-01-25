@@ -1,7 +1,7 @@
 use crate::data_writer::DataWriter;
 use crate::game::chat::ChatComponent;
 use crate::game::engine::SyncEnvironment;
-use crate::game::nbt::{CompoundElement, NBTTag};
+use crate::game::nbt::NBTTag;
 use crate::game::packets::{Packet, PlayerInfoAction, PlayerInfoPlayer, Slot, WorldBorderAction};
 use crate::game::player::Player;
 use crate::game::world::angle::Angle;

@@ -17,6 +17,10 @@ rustc-serialize = "0.3.24"
 mio = { version = "0.7.13", features = ["os-poll", "net"] }
 arrayvec = "0.7.1"
 bytemuck = "1.7.3"
+flate2 = { version = "1.0.22" }
+openssl = "0.10.38"
+fxhash = "0.2.1"
+byteorder = "1.4.3"
 
 [profile.release]
 #lto = true
