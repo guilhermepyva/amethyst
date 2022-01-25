@@ -48,8 +48,10 @@ impl NBTTag {
         }
     }
 
-    pub fn write<'a>(&self, data: &'a mut Vec<u8>, name: Option<&String>) {
-        data.push(self.type_id());
+    pub fn write<'a>(&self, data: &'a mut Vec<u8>, name: Option<&String>, include_type_id: bool) {
+        if include_type_id {
+            data.push(self.type_id());
+        }
         if name.is_some() {
             let name = name.unwrap();
             data.extend_from_slice(&(name.len() as i16).to_be_bytes());
@@ -75,12 +77,12 @@ impl NBTTag {
                 data.push(*type_id);
                 data.extend_from_slice(&(list.len() as i32).to_be_bytes());
                 for element in list {
-                    element.write(data, None);
+                    element.write(data, None, false);
                 }
             }
             NBTTag::Compound { compound } => {
                 for element in compound {
-                    element.1.write(data, Some(&element.0));
+                    element.1.write(data, Some(&element.0), true);
                 }
                 data.push(0);
             }
@@ -99,8 +101,11 @@ impl NBTTag {
         }
     }
 
-    pub fn read<R: Read>(data: &mut R, name: bool) -> Result<(NBTTag, Option<String>), NBTParseError> {
-        let type_id = data.read_u8()?;
+    pub fn read<R: Read>(data: &mut R, read_name: bool, type_id: Option<u8>) -> Result<(NBTTag, Option<String>), NBTParseError> {
+        let type_id = match type_id {
+            None => data.read_u8()?,
+            Some(x) => x
+        };
 
         if type_id == 0 {
             return Ok((NBTTag::End, None))
@@ -108,8 +113,8 @@ impl NBTTag {
 
         let mut string = None;
 
-        if name {
-            let name_size = data.read_u16::<BigEndian>()?;
+        if read_name {
+            let name_size = data.read_i16::<BigEndian>()?;
             let mut vec = vec![0u8; name_size as usize];
             data.read(&mut vec);
             string = Some(String::from_utf8(vec)?);
@@ -129,7 +134,7 @@ impl NBTTag {
                 Ok((NBTTag::ByteArray {bytes}, string))
             }
             8 => {
-                let name_size = data.read_u16::<BigEndian>()?;
+                let name_size = data.read_i16::<BigEndian>()?;
                 let mut vec = vec![0u8; name_size as usize];
                 data.read(&mut vec);
                 Ok((NBTTag::String {string: String::from_utf8(vec)?}, string))
@@ -141,7 +146,7 @@ impl NBTTag {
                 let mut list = Vec::with_capacity(length as usize);
 
                 for _ in 0..length {
-                    let element = NBTTag::read(data, false)?;
+                    let element = NBTTag::read(data, false, Some(type_id))?;
                     list.push(element.0);
                 }
 
@@ -151,7 +156,7 @@ impl NBTTag {
                 let mut map = FxHashMap::default();
 
                 loop {
-                    let element = NBTTag::read(data, true)?;
+                    let element = NBTTag::read(data, true, None)?;
 
                     if let NBTTag::End = element.0 {
                         break;

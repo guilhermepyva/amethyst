@@ -458,7 +458,7 @@ impl Packet {
                             slot.nbt
                                 .as_ref()
                                 .unwrap()
-                                .write(&mut writer.data, Some(&String::new()));
+                                .write(&mut writer.data, Some(&String::new()), true);
                         }
                     }
                 }
