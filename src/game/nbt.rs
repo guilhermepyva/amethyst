@@ -164,9 +164,9 @@ impl NBTTag {
             }
             11 => {
                 let length = data.read_i32::<BigEndian>()?;
-                let array = vec![0i32; length as usize];
+                let mut array = vec![0i32; length as usize];
 
-                for i in 0..length {
+                for i in 0..length as usize {
                     array[i] = data.read_i32::<BigEndian>()?;
                 }
 
@@ -174,9 +174,9 @@ impl NBTTag {
             }
             12 => {
                 let length = data.read_i32::<BigEndian>()?;
-                let array = vec![0i64; length as usize];
+                let mut array = vec![0i64; length as usize];
 
-                for i in 0..length {
+                for i in 0..length as usize {
                     array[i] = data.read_i64::<BigEndian>()?;
                 }
 
